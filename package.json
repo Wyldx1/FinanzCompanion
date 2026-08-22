@@ -2,7 +2,7 @@
   "name": "finanz-companion",
   "private": true,
   "scripts": {
-    "dev": "pnpm -r --parallel dev",
+    "dev": "pnpm --filter @finanz/db build && pnpm -r --parallel dev",
     "dev:web": "pnpm --filter @finanz/web dev",
     "dev:bot": "pnpm --filter @finanz/bot dev",
     "dev:worker": "pnpm --filter @finanz/worker dev",

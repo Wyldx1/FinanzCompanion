@@ -33,7 +33,8 @@ export async function createSession(userId: number): Promise<string> {
   const cookieStore = await cookies();
   cookieStore.set(SESSION_COOKIE_NAME, sessionId, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    // Secure nur bei HTTPS (z. B. IP-only-Deployment laeuft über HTTP)
+    secure: process.env.APP_URL?.startsWith('https://') ?? false,
     sameSite: 'lax',
     expires: expiresAt,
     path: '/',

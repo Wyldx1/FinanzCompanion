@@ -1,0 +1,68 @@
+# Production compose for IP-only deployment (no domain/TLS)
+# Access via http://78.47.146.172:3000
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: finanzen
+      POSTGRES_USER: finanzen
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD fehlt in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finanzen"]
+      interval: 10s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://finanzen:${DB_PASSWORD}@db:5432/finanzen
+      APP_URL: http://78.47.146.172:3000
+      NODE_ENV: production
+      TZ: Europe/Berlin
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  bot:
+    build:
+      context: .
+      dockerfile: apps/bot/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://finanzen:${DB_PASSWORD}@db:5432/finanzen
+      NODE_ENV: production
+      TZ: Europe/Berlin
+    ports:
+      - "3001:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://finanzen:${DB_PASSWORD}@db:5432/finanzen
+      NODE_ENV: production
+      TZ: Europe/Berlin
+      REMINDER_HOUR: ${REMINDER_HOUR:-19}
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:
