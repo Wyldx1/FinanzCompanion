@@ -204,6 +204,13 @@
   }
 }
 
+@layer utilities {
+  /* iOS Safe-Area (Bottom-Nav) */
+  .safe-area-pb {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 8px;

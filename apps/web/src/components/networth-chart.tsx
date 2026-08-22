@@ -35,7 +35,8 @@ export function NetworthChart({ data }: NetworthChartProps) {
   }));
 
   return (
-    <ResponsiveContainer width="100%" height={350}>
+    <div className="h-[260px] md:h-[350px]">
+      <ResponsiveContainer width="100%" height="100%">
       <AreaChart data={chartData} margin={{ top: 20, right: 30, left: 0, bottom: 0 }}>
         <defs>
           {/* Gradient for liquid assets */}
@@ -150,6 +151,7 @@ export function NetworthChart({ data }: NetworthChartProps) {
           }}
         />
       </AreaChart>
-    </ResponsiveContainer>
+      </ResponsiveContainer>
+    </div>
   );
 }

@@ -1,16 +1,20 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { calculateMetrics, getNetworthHistory } from '@/lib/calculations';
+import { calculateMetrics, getNetworthHistory, getCategoryExpenses, getSpendingTrend } from '@/lib/calculations';
 import { getCurrentPeriod, formatCurrency, formatPercent, formatPeriod } from '@/lib/utils';
 import { NetworthChart } from '@/components/networth-chart';
+import { CategoryChart } from '@/components/category-chart';
+import { SpendingTrendChart } from '@/components/spending-trend-chart';
 import { MetricCard } from '@/components/metric-card';
-import { TrendingUp, Plus, Sparkles } from 'lucide-react';
+import { TrendingUp, Plus, Sparkles, PieChart as PieChartIcon, BarChart3 } from 'lucide-react';
 import Link from 'next/link';
 
 export default async function DashboardPage() {
   const currentPeriod = getCurrentPeriod();
   const metrics = await calculateMetrics(currentPeriod);
   const history = await getNetworthHistory(24);
+  const categoryExpenses = await getCategoryExpenses(currentPeriod);
+  const spendingTrend = await getSpendingTrend(6);
 
   const hasData = metrics !== null;
 
@@ -19,7 +23,7 @@ export default async function DashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold gradient-text">Dashboard</h1>
+          <h1 className="text-3xl md:text-4xl font-bold gradient-text">Dashboard</h1>
           <p className="text-muted-foreground mt-1">{formatPeriod(currentPeriod)}</p>
         </div>
         <Link href="/snapshot/new">
@@ -103,6 +107,57 @@ export default async function DashboardPage() {
               </CardContent>
             </Card>
           )}
+
+          {/* Category & Trend Charts */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <Card className="glass hover-lift overflow-hidden">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <PieChartIcon className="h-5 w-5 text-primary" />
+                  Ausgaben nach Kategorie
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {categoryExpenses.length === 0 ? (
+                  <div className="text-center py-10">
+                    <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                      <span className="text-3xl">📊</span>
+                    </div>
+                    <p className="text-foreground mb-1">Noch keine Ausgaben</p>
+                    <p className="text-muted-foreground text-sm">
+                      Erfasse Transaktionen, um die Verteilung zu sehen
+                    </p>
+                  </div>
+                ) : (
+                  <CategoryChart data={categoryExpenses} />
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="glass hover-lift overflow-hidden">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5 text-primary" />
+                  Ausgaben-Trend
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {spendingTrend.every((m) => m.spendCents === 0) ? (
+                  <div className="text-center py-10">
+                    <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
+                      <span className="text-3xl">📈</span>
+                    </div>
+                    <p className="text-foreground mb-1">Noch keine Ausgaben</p>
+                    <p className="text-muted-foreground text-sm">
+                      Der Trend erscheint, sobald Transaktionen erfasst sind
+                    </p>
+                  </div>
+                ) : (
+                  <SpendingTrendChart data={spendingTrend} />
+                )}
+              </CardContent>
+            </Card>
+          </div>
 
           {/* Monthly Summary */}
           <div className="grid gap-4 lg:grid-cols-2">

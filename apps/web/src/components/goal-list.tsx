@@ -1,7 +1,17 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { FeedbackToast, useFeedback } from '@/components/feedback-toast';
 import { Pencil, Archive, Check, PiggyBank, ShoppingBag, CreditCard, Landmark, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/utils';
@@ -34,23 +44,37 @@ interface GoalListProps {
 
 export function GoalList({ goals, isAchieved = false }: GoalListProps) {
   const router = useRouter();
+  const [archiveId, setArchiveId] = useState<number | null>(null);
+  const { feedback, showFeedback } = useFeedback();
 
   async function handleArchive(id: number) {
-    if (!confirm('Ziel wirklich archivieren?')) return;
+    setArchiveId(null);
 
-    await fetch(`/api/goals/${id}`, {
+    const res = await fetch(`/api/goals/${id}`, {
       method: 'DELETE',
     });
+
+    showFeedback(
+      res.ok
+        ? { text: 'Ziel archiviert', kind: 'success' }
+        : { text: 'Archivieren fehlgeschlagen', kind: 'error' }
+    );
 
     router.refresh();
   }
 
   async function handleMarkAchieved(id: number) {
-    await fetch(`/api/goals/${id}`, {
+    const res = await fetch(`/api/goals/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ achievedAt: new Date().toISOString() }),
     });
+
+    showFeedback(
+      res.ok
+        ? { text: 'Ziel als erreicht markiert', kind: 'success' }
+        : { text: 'Speichern fehlgeschlagen', kind: 'error' }
+    );
 
     router.refresh();
   }
@@ -145,7 +169,7 @@ export function GoalList({ goals, isAchieved = false }: GoalListProps) {
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => handleArchive(goal.id)}
+                    onClick={() => setArchiveId(goal.id)}
                     className="hover:bg-destructive/20 hover:text-destructive"
                   >
                     <Archive className="h-4 w-4" />
@@ -188,6 +212,30 @@ export function GoalList({ goals, isAchieved = false }: GoalListProps) {
           </div>
         );
       })}
+
+      <Dialog open={archiveId !== null} onOpenChange={(open) => !open && setArchiveId(null)}>
+        <DialogContent className="glass border-white/10">
+          <DialogHeader>
+            <DialogTitle>Ziel archivieren?</DialogTitle>
+            <DialogDescription>
+              Das Ziel wird aus der aktiven Liste entfernt.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setArchiveId(null)}>
+              Abbrechen
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => archiveId !== null && handleArchive(archiveId)}
+            >
+              Archivieren
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <FeedbackToast feedback={feedback} />
     </div>
   );
 }

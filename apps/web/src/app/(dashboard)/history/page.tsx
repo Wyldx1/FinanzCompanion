@@ -62,7 +62,7 @@ export default async function HistoryPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold gradient-text">Historie</h1>
+          <h1 className="text-3xl md:text-4xl font-bold gradient-text">Historie</h1>
           <p className="text-muted-foreground mt-1">
             {totalMonths} Monate erfasst · {completeMonths} abgeschlossen
           </p>

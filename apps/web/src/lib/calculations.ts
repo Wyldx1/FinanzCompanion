@@ -1,5 +1,5 @@
 import { db } from './db';
-import { accounts, snapshots, snapshotBalances, transactions } from '@finanz/db/schema';
+import { accounts, categories, snapshots, snapshotBalances, transactions } from '@finanz/db/schema';
 import { eq, and, gte, lt, desc, isNull, sql } from 'drizzle-orm';
 import { getPreviousPeriod } from './utils';
 
@@ -121,6 +121,83 @@ export async function getTrackedExpenses(period: string): Promise<number> {
     );
 
   return Number(result[0]?.total) || 0;
+}
+
+export interface CategoryExpense {
+  categoryId: number | null;
+  name: string;
+  icon: string | null;
+  totalCents: number;
+}
+
+export async function getCategoryExpenses(period: string): Promise<CategoryExpense[]> {
+  const [year, month] = period.split('-').map(Number);
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 1);
+
+  const result = await db
+    .select({
+      categoryId: transactions.categoryId,
+      name: categories.name,
+      icon: categories.icon,
+      totalCents: sql<number>`COALESCE(SUM(amount_cents), 0)`,
+    })
+    .from(transactions)
+    .leftJoin(categories, eq(transactions.categoryId, categories.id))
+    .where(
+      and(
+        eq(transactions.direction, 'expense'),
+        gte(transactions.occurredOn, startDate),
+        lt(transactions.occurredOn, endDate)
+      )
+    )
+    .groupBy(transactions.categoryId, categories.name, categories.icon)
+    .orderBy(desc(sql`COALESCE(SUM(amount_cents), 0)`));
+
+  return result.map((row) => ({
+    categoryId: row.categoryId,
+    name: row.name ?? 'Sonstiges',
+    icon: row.icon,
+    totalCents: Number(row.totalCents) || 0,
+  }));
+}
+
+export interface MonthlySpend {
+  period: string;
+  spendCents: number;
+}
+
+export async function getSpendingTrend(months: number = 6): Promise<MonthlySpend[]> {
+  const now = new Date();
+  const startDate = new Date(now.getFullYear(), now.getMonth() - (months - 1), 1);
+  const endDate = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+  const result = await db
+    .select({
+      period: sql<string>`to_char(occurred_on, 'YYYY-MM')`,
+      totalCents: sql<number>`COALESCE(SUM(amount_cents), 0)`,
+    })
+    .from(transactions)
+    .where(
+      and(
+        eq(transactions.direction, 'expense'),
+        gte(transactions.occurredOn, startDate),
+        lt(transactions.occurredOn, endDate)
+      )
+    )
+    .groupBy(sql`to_char(occurred_on, 'YYYY-MM')`);
+
+  const byPeriod = new Map(result.map((row) => [row.period, Number(row.totalCents) || 0]));
+
+  // Fill all calendar months, even those without transactions
+  const trend: MonthlySpend[] = [];
+  for (let i = months - 1; i >= 0; i--) {
+    const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const period = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    trend.push({ period, spendCents: byPeriod.get(period) ?? 0 });
+  }
+
+  return trend;
 }
 
 export async function calculateMetrics(period: string): Promise<SnapshotMetrics | null> {

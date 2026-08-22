@@ -1,7 +1,17 @@
 'use client';
 
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { FeedbackToast, useFeedback } from '@/components/feedback-toast';
 import { Pencil, Trash2, Check, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/utils';
@@ -38,23 +48,37 @@ const directionColors = {
 
 export function TransactionList({ transactions }: TransactionListProps) {
   const router = useRouter();
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const { feedback, showFeedback } = useFeedback();
 
   async function handleDelete(id: number) {
-    if (!confirm('Transaktion wirklich löschen?')) return;
+    setDeleteId(null);
 
-    await fetch(`/api/transactions/${id}`, {
+    const res = await fetch(`/api/transactions/${id}`, {
       method: 'DELETE',
     });
+
+    showFeedback(
+      res.ok
+        ? { text: 'Transaktion gelöscht', kind: 'success' }
+        : { text: 'Löschen fehlgeschlagen', kind: 'error' }
+    );
 
     router.refresh();
   }
 
   async function handleConfirm(id: number) {
-    await fetch(`/api/transactions/${id}`, {
+    const res = await fetch(`/api/transactions/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ confirmed: true }),
     });
+
+    showFeedback(
+      res.ok
+        ? { text: 'Transaktion bestätigt', kind: 'success' }
+        : { text: 'Bestätigen fehlgeschlagen', kind: 'error' }
+    );
 
     router.refresh();
   }
@@ -102,13 +126,13 @@ export function TransactionList({ transactions }: TransactionListProps) {
                 )}
                 style={{ animationDelay: `${index * 0.03}s` }}
               >
-                <div className="flex items-center gap-4">
-                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-2xl">
+                <div className="flex items-center gap-4 min-w-0 flex-1">
+                  <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center text-2xl flex-shrink-0">
                     {tx.category?.icon || '❓'}
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="font-semibold">
+                      <p className="font-semibold truncate">
                         {tx.merchant || tx.category?.name || 'Sonstiges'}
                       </p>
                       {!tx.confirmed && (
@@ -133,8 +157,8 @@ export function TransactionList({ transactions }: TransactionListProps) {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-4">
-                  <p className={cn('font-bold text-lg', directionColors[tx.direction])}>
+                <div className="flex items-center gap-4 flex-shrink-0">
+                  <p className={cn('font-bold text-lg whitespace-nowrap', directionColors[tx.direction])}>
                     {tx.direction === 'expense' ? '-' : tx.direction === 'income' ? '+' : ''}
                     {formatCurrency(tx.amountCents)}
                   </p>
@@ -161,7 +185,7 @@ export function TransactionList({ transactions }: TransactionListProps) {
                     <Button
                       variant="ghost"
                       size="icon"
-                      onClick={() => handleDelete(tx.id)}
+                      onClick={() => setDeleteId(tx.id)}
                       className="hover:bg-destructive/20 hover:text-destructive"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -173,6 +197,30 @@ export function TransactionList({ transactions }: TransactionListProps) {
           </div>
         </div>
       ))}
+
+      <Dialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <DialogContent className="glass border-white/10">
+          <DialogHeader>
+            <DialogTitle>Transaktion löschen?</DialogTitle>
+            <DialogDescription>
+              Diese Aktion kann nicht rückgängig gemacht werden.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteId(null)}>
+              Abbrechen
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteId !== null && handleDelete(deleteId)}
+            >
+              Löschen
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <FeedbackToast feedback={feedback} />
     </div>
   );
 }

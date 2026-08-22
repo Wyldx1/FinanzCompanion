@@ -28,7 +28,7 @@ export default async function GoalsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-4xl font-bold gradient-text">Ziele</h1>
+          <h1 className="text-3xl md:text-4xl font-bold gradient-text">Ziele</h1>
           <p className="text-muted-foreground mt-1">
             {inProgressGoals.length} aktive Ziele
             {achievedGoals.length > 0 && ` · ${achievedGoals.length} erreicht`}
