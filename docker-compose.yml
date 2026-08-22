@@ -1,0 +1,85 @@
+# Production compose für Hetzner (siehe finanz-companion-spec.md §12.5)
+# Alle Dienste hängen hinter Caddy (TLS via Let's Encrypt).
+# Nach außen offen sind nur 80/443 — App- und DB-Ports werden nicht publiziert.
+# Voraussetzung: .env aus .env.example (DOMAIN, DB_PASSWORD, SESSION_SECRET, ...)
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: finanzen
+      POSTGRES_USER: finanzen
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD fehlt in .env}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finanzen"]
+      interval: 10s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://finanzen:${DB_PASSWORD}@db:5432/finanzen
+      APP_URL: https://${DOMAIN:?DOMAIN fehlt in .env}
+      NODE_ENV: production
+      TZ: Europe/Berlin
+    depends_on:
+      db:
+        condition: service_healthy
+    labels:
+      - "caddy=${DOMAIN}"
+      - "caddy.reverse_proxy={{upstreams 3000}}"
+
+  bot:
+    build:
+      context: .
+      dockerfile: apps/bot/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://finanzen:${DB_PASSWORD}@db:5432/finanzen
+      NODE_ENV: production
+      TZ: Europe/Berlin
+    depends_on:
+      db:
+        condition: service_healthy
+    labels:
+      # "handle" statt "handle_path": der Bot erwartet den Pfad /telegram/webhook unverändert
+      - "caddy=${DOMAIN}"
+      - "caddy.handle=/telegram/*"
+      - "caddy.handle.reverse_proxy={{upstreams 3001}}"
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/worker/Dockerfile
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://finanzen:${DB_PASSWORD}@db:5432/finanzen
+      NODE_ENV: production
+      TZ: Europe/Berlin
+      REMINDER_HOUR: ${REMINDER_HOUR:-19}
+    depends_on:
+      db:
+        condition: service_healthy
+
+  caddy:
+    image: lucaslorentz/caddy-docker-proxy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - caddydata:/data
+
+volumes:
+  pgdata:
+  caddydata:

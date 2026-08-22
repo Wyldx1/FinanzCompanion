@@ -1,0 +1,20 @@
+# Development compose - just the database
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: finanzen
+      POSTGRES_USER: finanzen
+      POSTGRES_PASSWORD: devpassword
+    volumes:
+      - pgdata_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finanzen"]
+      interval: 10s
+      retries: 5
+    ports:
+      - "5432:5432"
+
+volumes:
+  pgdata_dev:

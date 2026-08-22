@@ -1,0 +1,23 @@
+name: Deploy to Hetzner
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to Hetzner
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: root
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            cd /root/finanz-companion
+            git pull origin main
+            docker compose down
+            docker compose up -d --build
+            docker system prune -f

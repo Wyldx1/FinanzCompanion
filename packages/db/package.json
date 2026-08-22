@@ -1,0 +1,30 @@
+{
+  "name": "@finanz/db",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema/index.ts"
+  },
+  "scripts": {
+    "generate": "drizzle-kit generate",
+    "migrate": "drizzle-kit migrate",
+    "seed": "tsx src/seed.ts",
+    "studio": "drizzle-kit studio",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@node-rs/argon2": "^1.8.3",
+    "drizzle-orm": "^0.33.0",
+    "postgres": "^3.4.4",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.0",
+    "drizzle-kit": "^0.24.0",
+    "dotenv": "^16.4.5",
+    "tsx": "^4.17.0",
+    "typescript": "^5.5.4"
+  }
+}

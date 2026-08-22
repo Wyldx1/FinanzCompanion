@@ -1,0 +1,1 @@
+ALTER TABLE "snapshot_balances" ADD CONSTRAINT "snapshot_balances_snapshot_id_account_id_pk" PRIMARY KEY("snapshot_id","account_id");

@@ -1,0 +1,235 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 10% 96%;
+    --foreground: 240 10% 10%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 10%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 10%;
+    --primary: 262 83% 70%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 5% 92%;
+    --secondary-foreground: 240 10% 10%;
+    --muted: 240 5% 92%;
+    --muted-foreground: 240 5% 45%;
+    --accent: 172 66% 70%;
+    --accent-foreground: 172 66% 15%;
+    --destructive: 0 84% 70%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 6% 90%;
+    --input: 240 6% 90%;
+    --ring: 262 83% 70%;
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 240 10% 6%;
+    --foreground: 240 10% 95%;
+    --card: 240 10% 9%;
+    --card-foreground: 240 10% 95%;
+    --popover: 240 10% 9%;
+    --popover-foreground: 240 10% 95%;
+    --primary: 262 83% 75%;
+    --primary-foreground: 262 83% 10%;
+    --secondary: 240 5% 15%;
+    --secondary-foreground: 240 10% 90%;
+    --muted: 240 5% 18%;
+    --muted-foreground: 240 5% 55%;
+    --accent: 172 66% 65%;
+    --accent-foreground: 172 66% 10%;
+    --destructive: 0 70% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 5% 18%;
+    --input: 240 5% 18%;
+    --ring: 262 83% 75%;
+
+    /* Pastel accent colors */
+    --pastel-purple: 262 83% 75%;
+    --pastel-mint: 172 66% 65%;
+    --pastel-pink: 330 80% 75%;
+    --pastel-blue: 210 80% 70%;
+    --pastel-yellow: 45 90% 70%;
+    --pastel-orange: 25 90% 70%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+}
+
+@layer components {
+  /* Glass effect cards */
+  .glass {
+    @apply bg-card/50 backdrop-blur-xl border border-white/10;
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-gradient-to-r from-[hsl(var(--primary))] via-[hsl(var(--accent))] to-[hsl(var(--pastel-pink))] bg-clip-text text-transparent;
+  }
+
+  /* Glow effects */
+  .glow {
+    box-shadow: 0 0 20px -5px hsl(var(--primary) / 0.3);
+  }
+
+  .glow-accent {
+    box-shadow: 0 0 20px -5px hsl(var(--accent) / 0.3);
+  }
+
+  /* Animated gradient border */
+  .gradient-border {
+    position: relative;
+    background: hsl(var(--card));
+    border-radius: var(--radius);
+  }
+
+  .gradient-border::before {
+    content: "";
+    position: absolute;
+    inset: -1px;
+    border-radius: calc(var(--radius) + 1px);
+    background: linear-gradient(
+      135deg,
+      hsl(var(--primary)),
+      hsl(var(--accent)),
+      hsl(var(--pastel-pink)),
+      hsl(var(--primary))
+    );
+    background-size: 300% 300%;
+    animation: gradient-shift 8s ease infinite;
+    z-index: -1;
+    opacity: 0.5;
+  }
+
+  @keyframes gradient-shift {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+  }
+
+  /* Pulse animation for numbers */
+  .pulse-number {
+    animation: pulse-subtle 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-subtle {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.8; }
+  }
+
+  /* Slide in animation */
+  .slide-in {
+    animation: slide-in 0.5s ease-out forwards;
+  }
+
+  @keyframes slide-in {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  /* Stagger children animation */
+  .stagger-children > * {
+    opacity: 0;
+    animation: slide-in 0.5s ease-out forwards;
+  }
+
+  .stagger-children > *:nth-child(1) { animation-delay: 0.1s; }
+  .stagger-children > *:nth-child(2) { animation-delay: 0.2s; }
+  .stagger-children > *:nth-child(3) { animation-delay: 0.3s; }
+  .stagger-children > *:nth-child(4) { animation-delay: 0.4s; }
+  .stagger-children > *:nth-child(5) { animation-delay: 0.5s; }
+  .stagger-children > *:nth-child(6) { animation-delay: 0.6s; }
+
+  /* Number counter animation */
+  @keyframes count-up {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .count-up {
+    animation: count-up 0.6s ease-out forwards;
+  }
+
+  /* Progress bar animation */
+  .progress-animate {
+    animation: progress-grow 1s ease-out forwards;
+  }
+
+  @keyframes progress-grow {
+    from { width: 0%; }
+  }
+
+  /* Hover lift effect */
+  .hover-lift {
+    @apply transition-all duration-300;
+  }
+
+  .hover-lift:hover {
+    @apply -translate-y-1;
+    box-shadow: 0 10px 40px -10px hsl(var(--primary) / 0.2);
+  }
+
+  /* Shimmer loading effect */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 0%,
+      hsl(var(--muted-foreground) / 0.1) 50%,
+      hsl(var(--muted)) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+  }
+
+  @keyframes shimmer {
+    0% { background-position: -200% 0; }
+    100% { background-position: 200% 0; }
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--background));
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground) / 0.5);
+}
+
+/* Recharts customization */
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: hsl(var(--border));
+  stroke-opacity: 0.5;
+}
+
+.recharts-tooltip-wrapper {
+  filter: drop-shadow(0 10px 20px hsl(var(--background) / 0.5));
+}
