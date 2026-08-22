@@ -4,17 +4,9 @@ import { db } from '@/lib/db';
 import { goals } from '@finanz/db/schema';
 import { eq } from 'drizzle-orm';
 import { formatCurrency } from '@/lib/utils';
-import { Plus, Target, PiggyBank, ShoppingBag, CreditCard, Landmark, Sparkles, Pencil, Archive, TrendingUp } from 'lucide-react';
+import { Plus, Target, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { GoalList } from '@/components/goal-list';
-
-const goalKindConfig = {
-  emergency_fund: { label: 'Notgroschen', icon: PiggyBank, color: 'text-[hsl(172,66%,65%)]', bg: 'bg-[hsl(172,66%,65%)]/10' },
-  purchase: { label: 'Anschaffung', icon: ShoppingBag, color: 'text-[hsl(262,83%,75%)]', bg: 'bg-[hsl(262,83%,75%)]/10' },
-  debt_payoff: { label: 'Schuldentilgung', icon: CreditCard, color: 'text-[hsl(330,80%,75%)]', bg: 'bg-[hsl(330,80%,75%)]/10' },
-  retirement: { label: 'Altersvorsorge', icon: Landmark, color: 'text-[hsl(210,80%,70%)]', bg: 'bg-[hsl(210,80%,70%)]/10' },
-  custom: { label: 'Benutzerdefiniert', icon: Sparkles, color: 'text-[hsl(45,90%,70%)]', bg: 'bg-[hsl(45,90%,70%)]/10' },
-};
 
 export default async function GoalsPage() {
   const activeGoals = await db.query.goals.findMany({
@@ -104,7 +96,7 @@ export default async function GoalsPage() {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <GoalList goals={inProgressGoals} goalKindConfig={goalKindConfig} />
+          <GoalList goals={inProgressGoals} />
         </CardContent>
       </Card>
 
@@ -118,7 +110,7 @@ export default async function GoalsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <GoalList goals={achievedGoals} goalKindConfig={goalKindConfig} isAchieved />
+            <GoalList goals={achievedGoals} isAchieved />
           </CardContent>
         </Card>
       )}

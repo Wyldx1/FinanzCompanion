@@ -2,10 +2,18 @@
 
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Pencil, Archive, Check } from 'lucide-react';
+import { Pencil, Archive, Check, PiggyBank, ShoppingBag, CreditCard, Landmark, Sparkles } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/utils';
 import type { LucideIcon } from 'lucide-react';
+
+const goalKindConfig: Record<string, { label: string; icon: LucideIcon; color: string; bg: string }> = {
+  emergency_fund: { label: 'Notgroschen', icon: PiggyBank, color: 'text-[hsl(172,66%,65%)]', bg: 'bg-[hsl(172,66%,65%)]/10' },
+  purchase: { label: 'Anschaffung', icon: ShoppingBag, color: 'text-[hsl(262,83%,75%)]', bg: 'bg-[hsl(262,83%,75%)]/10' },
+  debt_payoff: { label: 'Schuldentilgung', icon: CreditCard, color: 'text-[hsl(330,80%,75%)]', bg: 'bg-[hsl(330,80%,75%)]/10' },
+  retirement: { label: 'Altersvorsorge', icon: Landmark, color: 'text-[hsl(210,80%,70%)]', bg: 'bg-[hsl(210,80%,70%)]/10' },
+  custom: { label: 'Benutzerdefiniert', icon: Sparkles, color: 'text-[hsl(45,90%,70%)]', bg: 'bg-[hsl(45,90%,70%)]/10' },
+};
 
 interface Goal {
   id: number;
@@ -19,22 +27,12 @@ interface Goal {
   linkedAccount: { id: number; name: string; icon: string | null } | null;
 }
 
-interface GoalKindConfig {
-  [key: string]: {
-    label: string;
-    icon: LucideIcon;
-    color: string;
-    bg: string;
-  };
-}
-
 interface GoalListProps {
   goals: Goal[];
-  goalKindConfig: GoalKindConfig;
   isAchieved?: boolean;
 }
 
-export function GoalList({ goals, goalKindConfig, isAchieved = false }: GoalListProps) {
+export function GoalList({ goals, isAchieved = false }: GoalListProps) {
   const router = useRouter();
 
   async function handleArchive(id: number) {
