@@ -1,8 +1,8 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Fuel, Zap, HardHat, Scale, Wrench, TrendingUp, Droplets, Calendar } from 'lucide-react';
-import { formatCurrency, formatMinutes } from '@/lib/utils';
+import { Fuel, Zap, HardHat, Scale, Wrench, TrendingUp, Droplets, Calendar, Repeat } from 'lucide-react';
+import { formatCurrency, formatMinutes, getCurrentPeriod } from '@/lib/utils';
 import Link from 'next/link';
 
 interface Vehicle {
@@ -42,11 +42,22 @@ interface WeightEntry {
   weightKg: number;
 }
 
+interface RecurringExpense {
+  id: number;
+  name: string;
+  amountCents: number;
+  direction: 'expense' | 'income' | 'transfer';
+  active: boolean;
+  startPeriod: string;
+  endPeriod: string | null;
+}
+
 interface DashboardToolsOverviewProps {
   fuelEntries: FuelEntry[];
   repairs: Repair[];
   workTimeEntries: WorkTimeEntry[];
   weightEntries: WeightEntry[];
+  recurringExpenses: RecurringExpense[];
 }
 
 function getWeekRange(date: Date): { start: Date; end: Date } {
@@ -71,8 +82,24 @@ export function DashboardToolsOverview({
   repairs,
   workTimeEntries,
   weightEntries,
+  recurringExpenses,
 }: DashboardToolsOverviewProps) {
   const now = new Date();
+  const currentPeriod = getCurrentPeriod();
+
+  // Recurring expenses this month
+  const activeRecurring = recurringExpenses.filter(
+    (r) =>
+      r.active &&
+      currentPeriod >= r.startPeriod &&
+      (!r.endPeriod || currentPeriod <= r.endPeriod)
+  );
+  const recurringIncome = activeRecurring
+    .filter((r) => r.direction === 'income')
+    .reduce((sum, r) => sum + r.amountCents, 0);
+  const recurringExpense = activeRecurring
+    .filter((r) => r.direction === 'expense')
+    .reduce((sum, r) => sum + r.amountCents, 0);
 
   // Work time this week
   const weekRange = getWeekRange(now);
@@ -213,6 +240,28 @@ export function DashboardToolsOverview({
                   </div>
                   <div className="w-12 h-12 rounded-xl bg-[hsl(210,80%,70%)]/10 flex items-center justify-center flex-shrink-0">
                     <Scale className="h-6 w-6 text-[hsl(210,80%,70%)]" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        )}
+
+        {/* Recurring expenses */}
+        {recurringExpenses.length > 0 && (
+          <Link href="/recurring-expenses">
+            <Card className="glass hover-lift overflow-hidden h-full">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0">
+                    <p className="text-sm text-muted-foreground truncate">Daueraufträge / Monat</p>
+                    <p className="text-xl font-bold mt-1 truncate">{formatCurrency(recurringExpense)}</p>
+                    <p className="text-xs text-muted-foreground mt-1 truncate">
+                      {formatCurrency(recurringIncome)} Einnahmen · {activeRecurring.length} aktiv
+                    </p>
+                  </div>
+                  <div className="w-12 h-12 rounded-xl bg-[hsl(330,80%,75%)]/10 flex items-center justify-center flex-shrink-0">
+                    <Repeat className="h-6 w-6 text-[hsl(330,80%,75%)]" />
                   </div>
                 </div>
               </CardContent>

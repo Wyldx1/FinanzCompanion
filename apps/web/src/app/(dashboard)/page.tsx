@@ -10,12 +10,12 @@ import { DashboardToolsOverview } from '@/components/dashboard-tools-overview';
 import { TrendingUp, Plus, Sparkles, PieChart as PieChartIcon, BarChart3 } from 'lucide-react';
 import Link from 'next/link';
 import { db } from '@/lib/db';
-import { fuelEntries, repairs, workTimeEntries, weightEntries } from '@finanz/db/schema';
+import { fuelEntries, repairs, workTimeEntries, weightEntries, recurringExpenses } from '@finanz/db/schema';
 import { desc } from 'drizzle-orm';
 
 export default async function DashboardPage() {
   const currentPeriod = getCurrentPeriod();
-  const [metrics, history, categoryExpenses, spendingTrend, projectedSummary, monthlyTxSummary, allFuelEntries, allRepairs, allWorkTimeEntries, allWeightEntries] = await Promise.all([
+  const [metrics, history, categoryExpenses, spendingTrend, projectedSummary, monthlyTxSummary, allFuelEntries, allRepairs, allWorkTimeEntries, allWeightEntries, allRecurringExpenses] = await Promise.all([
     calculateMetrics(currentPeriod),
     getNetworthHistory(24),
     getCategoryExpenses(currentPeriod),
@@ -35,6 +35,9 @@ export default async function DashboardPage() {
     }),
     db.query.weightEntries.findMany({
       orderBy: [desc(weightEntries.date)],
+    }),
+    db.query.recurringExpenses.findMany({
+      orderBy: [desc(recurringExpenses.createdAt)],
     }),
   ]);
 
@@ -121,6 +124,7 @@ export default async function DashboardPage() {
             repairs={allRepairs}
             workTimeEntries={allWorkTimeEntries}
             weightEntries={allWeightEntries}
+            recurringExpenses={allRecurringExpenses}
           />
 
           {/* Projected Current State */}

@@ -6,6 +6,7 @@ import { desc } from 'drizzle-orm';
 import { Plus, Repeat } from 'lucide-react';
 import Link from 'next/link';
 import { RecurringExpenseList } from '@/components/recurring-expense-list';
+import { RecurringExpenseStats } from '@/components/recurring-expense-stats';
 
 export default async function RecurringExpensesPage() {
   const items = await db.query.recurringExpenses.findMany({
@@ -32,6 +33,9 @@ export default async function RecurringExpensesPage() {
           </Button>
         </Link>
       </div>
+
+      {/* Recurring Expenses Stats */}
+      <RecurringExpenseStats items={items} />
 
       {/* Recurring Expenses List */}
       <Card className="glass overflow-hidden">
