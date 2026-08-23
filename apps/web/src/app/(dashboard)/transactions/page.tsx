@@ -13,7 +13,7 @@ export default async function TransactionsPage() {
   const monthStart = new Date(currentPeriod + '-01');
 
   const allTransactions = await db.query.transactions.findMany({
-    with: { category: true, account: true },
+    with: { category: true, account: true, targetAccount: true },
     orderBy: [desc(transactions.occurredOn), desc(transactions.createdAt)],
     limit: 100,
   });

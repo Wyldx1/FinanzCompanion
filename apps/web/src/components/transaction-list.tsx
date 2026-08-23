@@ -34,6 +34,11 @@ interface Transaction {
     name: string;
     icon: string | null;
   } | null;
+  targetAccount: {
+    id: number;
+    name: string;
+    icon: string | null;
+  } | null;
 }
 
 interface TransactionListProps {
@@ -146,6 +151,16 @@ export function TransactionList({ transactions }: TransactionListProps) {
                       {tx.category && (
                         <span className="text-xs text-muted-foreground">
                           {tx.category.name}
+                        </span>
+                      )}
+                      {tx.account && (
+                        <span className="text-xs text-muted-foreground">
+                          {tx.category && ' · '}{tx.account.name}
+                        </span>
+                      )}
+                      {tx.direction === 'transfer' && tx.targetAccount && (
+                        <span className="text-xs text-muted-foreground">
+                          {' '}→ {tx.targetAccount.name}
                         </span>
                       )}
                       {tx.note && (

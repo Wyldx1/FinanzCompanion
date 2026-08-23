@@ -19,6 +19,7 @@ interface SnapshotFormProps {
   period: string;
   accounts: Account[];
   initialValues: Record<number, number>;
+  projectedValues: Record<number, number>;
   initialIncome: number;
   initialNote: string;
   isEdit: boolean;
@@ -28,6 +29,7 @@ export function SnapshotForm({
   period,
   accounts,
   initialValues,
+  projectedValues,
   initialIncome,
   initialNote,
   isEdit,
@@ -170,6 +172,17 @@ export function SnapshotForm({
             </div>
 
             <div className="space-y-3">
+              {projectedValues[currentAccount.id] !== undefined && (
+                <div className="p-3 rounded-lg bg-primary/10 border border-primary/20">
+                  <p className="text-sm text-muted-foreground">
+                    Laut erfassten Transaktionen erwartet:
+                  </p>
+                  <p className="text-lg font-semibold">
+                    {formatCurrency(projectedValues[currentAccount.id])}
+                  </p>
+                </div>
+              )}
+
               <div className="relative">
                 <Input
                   type="text"
@@ -188,21 +201,54 @@ export function SnapshotForm({
                 </span>
               </div>
 
-              <Button
-                variant="outline"
-                className="w-full h-12"
-                onClick={() =>
-                  setValues({
-                    ...values,
-                    [currentAccount.id]: ((initialValues[currentAccount.id] || 0) / 100)
-                      .toFixed(2)
-                      .replace('.', ','),
-                  })
-                }
-              >
-                <Check className="mr-2 h-4 w-4" />
-                Unverändert ({formatCurrency(initialValues[currentAccount.id] || 0)})
-              </Button>
+              {(() => {
+                const entered = parseCurrency(values[currentAccount.id] || '0');
+                const projected = projectedValues[currentAccount.id];
+                if (entered === null || projected === undefined) return null;
+                const diff = entered - projected;
+                if (diff === 0) return null;
+                return (
+                  <p className={`text-sm text-center ${diff > 0 ? 'text-[hsl(172,66%,65%)]' : 'text-[hsl(330,80%,75%)]'}`}>
+                    Abweichung zur Projektion: {diff > 0 ? '+' : ''}{formatCurrency(diff)}
+                  </p>
+                );
+              })()}
+
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  variant="outline"
+                  className="w-full h-12"
+                  onClick={() =>
+                    setValues({
+                      ...values,
+                      [currentAccount.id]: ((initialValues[currentAccount.id] || 0) / 100)
+                        .toFixed(2)
+                        .replace('.', ','),
+                    })
+                  }
+                >
+                  <Check className="mr-2 h-4 w-4" />
+                  Unverändert
+                </Button>
+
+                {projectedValues[currentAccount.id] !== undefined && (
+                  <Button
+                    variant="outline"
+                    className="w-full h-12"
+                    onClick={() =>
+                      setValues({
+                        ...values,
+                        [currentAccount.id]: (projectedValues[currentAccount.id] / 100)
+                          .toFixed(2)
+                          .replace('.', ','),
+                      })
+                    }
+                  >
+                    <Sparkles className="mr-2 h-4 w-4" />
+                    Vorschlag
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         )}

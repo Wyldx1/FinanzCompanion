@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { calculateMetrics, getNetworthHistory, getCategoryExpenses, getSpendingTrend } from '@/lib/calculations';
+import { calculateMetrics, getNetworthHistory, getCategoryExpenses, getSpendingTrend, getProjectedSummary, getMonthlyTransactionSummary } from '@/lib/calculations';
 import { getCurrentPeriod, formatCurrency, formatPercent, formatPeriod } from '@/lib/utils';
 import { NetworthChart } from '@/components/networth-chart';
 import { CategoryChart } from '@/components/category-chart';
@@ -11,10 +11,14 @@ import Link from 'next/link';
 
 export default async function DashboardPage() {
   const currentPeriod = getCurrentPeriod();
-  const metrics = await calculateMetrics(currentPeriod);
-  const history = await getNetworthHistory(24);
-  const categoryExpenses = await getCategoryExpenses(currentPeriod);
-  const spendingTrend = await getSpendingTrend(6);
+  const [metrics, history, categoryExpenses, spendingTrend, projectedSummary, monthlyTxSummary] = await Promise.all([
+    calculateMetrics(currentPeriod),
+    getNetworthHistory(24),
+    getCategoryExpenses(currentPeriod),
+    getSpendingTrend(6),
+    getProjectedSummary(),
+    getMonthlyTransactionSummary(currentPeriod),
+  ]);
 
   const hasData = metrics !== null;
 
@@ -91,6 +95,78 @@ export default async function DashboardPage() {
               color="blue"
               subtitle="Liquide / Median-Ausgaben"
             />
+          </div>
+
+          {/* Projected Current State */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Card className="glass hover-lift">
+              <CardHeader>
+                <CardTitle>Geschätzter aktueller Stand</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {projectedSummary.lastSnapshotPeriod ? (
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Nettovermögen</span>
+                      <span className={`font-semibold text-lg ${projectedSummary.networth >= 0 ? 'text-[hsl(172,66%,65%)]' : 'text-[hsl(330,80%,75%)]'}`}>
+                        {formatCurrency(projectedSummary.networth)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Liquide Mittel</span>
+                      <span className="font-semibold text-lg">
+                        {formatCurrency(projectedSummary.liquid)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Schulden</span>
+                      <span className="font-semibold text-lg text-[hsl(330,80%,75%)]">
+                        {formatCurrency(projectedSummary.debts)}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground pt-2 border-t border-border">
+                      Basierend auf Monatsabschluss {formatPeriod(projectedSummary.lastSnapshotPeriod)} und {monthlyTxSummary.expenseCents + monthlyTxSummary.incomeCents > 0 ? 'erfassten' : 'keinen'} Transaktionen seitdem.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="text-center py-6">
+                    <p className="text-muted-foreground text-sm">
+                      Noch kein abgeschlossener Monatsabschluss vorhanden.
+                      Erstelle einen Snapshot, um eine laufende Projektion zu sehen.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="glass hover-lift">
+              <CardHeader>
+                <CardTitle>Laufende Monatsbilanz</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Einnahmen</span>
+                    <span className="font-semibold text-lg text-[hsl(172,66%,65%)]">
+                      +{formatCurrency(monthlyTxSummary.incomeCents)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Ausgaben</span>
+                    <span className="font-semibold text-lg text-[hsl(330,80%,75%)]">
+                      -{formatCurrency(monthlyTxSummary.expenseCents)}
+                    </span>
+                  </div>
+                  <div className="h-px bg-border" />
+                  <div className="flex justify-between items-center">
+                    <span className="text-muted-foreground">Saldo</span>
+                    <span className={`font-bold text-xl ${monthlyTxSummary.balanceCents >= 0 ? 'text-[hsl(172,66%,65%)]' : 'text-[hsl(330,80%,75%)]'}`}>
+                      {formatCurrency(monthlyTxSummary.balanceCents)}
+                    </span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </div>
 
           {/* Networth Chart */}

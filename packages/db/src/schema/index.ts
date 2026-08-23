@@ -199,6 +199,7 @@ export const transactions = pgTable(
     direction: txDirectionEnum('direction').notNull(),
     categoryId: integer('category_id').references(() => categories.id),
     accountId: integer('account_id').references(() => accounts.id),
+    targetAccountId: integer('target_account_id').references(() => accounts.id),
     merchant: text('merchant'),
     note: text('note'),
     source: txSourceEnum('source').notNull(),
@@ -210,6 +211,7 @@ export const transactions = pgTable(
   },
   (table) => ({
     idxTxPeriod: index('idx_tx_period').on(table.occurredOn),
+    idxTxAccount: index('idx_tx_account').on(table.accountId, table.occurredOn),
     idxTxCategory: index('idx_tx_category').on(table.categoryId, table.occurredOn),
   })
 );
@@ -221,6 +223,10 @@ export const transactionsRelations = relations(transactions, ({ one }) => ({
   }),
   account: one(accounts, {
     fields: [transactions.accountId],
+    references: [accounts.id],
+  }),
+  targetAccount: one(accounts, {
+    fields: [transactions.targetAccountId],
     references: [accounts.id],
   }),
 }));
@@ -236,11 +242,12 @@ export const debts = pgTable('debts', {
     .unique()
     .references(() => accounts.id),
   creditor: text('creditor').notNull(),
-  originalCents: bigint('original_cents', { mode: 'number' }),
+  originalCents: bigint('original_cents', { mode: 'number' }).notNull().default(0),
   interestRateBps: integer('interest_rate_bps').notNull().default(0),
-  minimumPaymentCents: bigint('minimum_payment_cents', { mode: 'number' }),
+  minimumPaymentCents: bigint('minimum_payment_cents', { mode: 'number' }).notNull().default(0),
   dueDay: smallint('due_day'),
   targetPayoffDate: timestamp('target_payoff_date', { mode: 'date' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const debtsRelations = relations(debts, ({ one }) => ({

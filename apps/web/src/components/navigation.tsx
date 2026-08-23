@@ -17,6 +17,7 @@ import {
   Target,
   Settings,
   CreditCard,
+  TrendingDown,
   Bot,
   Sparkles,
   Menu,
@@ -27,6 +28,7 @@ const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/accounts', label: 'Konten', icon: Wallet },
   { href: '/transactions', label: 'Transaktionen', icon: CreditCard },
+  { href: '/debts', label: 'Schulden', icon: TrendingDown },
   { href: '/history', label: 'Historie', icon: History },
   { href: '/goals', label: 'Ziele', icon: Target },
   { href: '/coach', label: 'Coach', icon: Bot },
@@ -34,8 +36,8 @@ const navItems = [
 ];
 
 // Mobile: 4 feste Slots + „Mehr"-Dialog für den Rest
-const mobileNavItems = [navItems[0], navItems[1], navItems[2], navItems[4]];
-const moreNavItems = [navItems[3], navItems[5], navItems[6]];
+const mobileNavItems = [navItems[0], navItems[1], navItems[2], navItems[5]];
+const moreNavItems = [navItems[3], navItems[4], navItems[6]];
 
 export function Navigation() {
   const pathname = usePathname();

@@ -1,6 +1,7 @@
 import { SnapshotForm } from '@/components/snapshot-form';
 import { db } from '@/lib/db';
 import { accounts, snapshots, snapshotBalances } from '@finanz/db/schema';
+import { getProjectedBalances } from '@/lib/calculations';
 import { eq, isNull, desc } from 'drizzle-orm';
 import { getCurrentPeriod, getPreviousPeriod } from '@/lib/utils';
 
@@ -47,12 +48,20 @@ export default async function NewSnapshotPage() {
     }
   }
 
+  // Projected balances based on last completed snapshot + transactions
+  const projectedBalances = await getProjectedBalances();
+  const projectedByAccount: Record<number, number> = {};
+  for (const p of projectedBalances) {
+    projectedByAccount[p.accountId] = p.projectedBalance;
+  }
+
   return (
     <div className="max-w-2xl mx-auto">
       <SnapshotForm
         period={currentPeriod}
         accounts={activeAccounts}
         initialValues={initialValues}
+        projectedValues={projectedByAccount}
         initialIncome={currentSnapshot?.incomeCents || 0}
         initialNote={currentSnapshot?.note || ''}
         isEdit={!!currentSnapshot}

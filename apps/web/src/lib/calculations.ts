@@ -1,7 +1,18 @@
 import { db } from './db';
 import { accounts, categories, snapshots, snapshotBalances, transactions } from '@finanz/db/schema';
-import { eq, and, gte, lt, desc, isNull, sql } from 'drizzle-orm';
+import { eq, and, gte, lte, lt, desc, isNull, sql } from 'drizzle-orm';
 import { getPreviousPeriod } from './utils';
+
+function getNextPeriod(period: string): string {
+  const [year, month] = period.split('-').map(Number);
+  const date = new Date(year, month, 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function periodToFirstDay(period: string): Date {
+  const [year, month] = period.split('-').map(Number);
+  return new Date(year, month - 1, 1);
+}
 
 export interface SnapshotMetrics {
   period: string;
@@ -293,4 +304,247 @@ export async function getNetworthHistory(limit: number = 24): Promise<{
   }
 
   return history;
+}
+
+// =====================================================
+// LAUFENDE PROJEKTION AUS SNAPSHOTS + TRANSAKTIONEN
+// =====================================================
+
+export interface ProjectedBalance {
+  accountId: number;
+  name: string;
+  kind: string;
+  icon: string | null;
+  snapshotBalance: number | null;
+  projectedBalance: number;
+  difference: number;
+}
+
+export interface ProjectedSummary {
+  networth: number;
+  liquid: number;
+  debts: number;
+  lastSnapshotPeriod: string | null;
+  lastSnapshotDate: Date | null;
+}
+
+export interface MonthlyTransactionSummary {
+  incomeCents: number;
+  expenseCents: number;
+  transferOutCents: number;
+  transferInCents: number;
+  balanceCents: number;
+}
+
+async function getLastCompletedSnapshotBefore(asOfDate: Date) {
+  const year = asOfDate.getFullYear();
+  const month = String(asOfDate.getMonth() + 1).padStart(2, '0');
+  const asOfPeriod = `${year}-${month}`;
+
+  return db.query.snapshots.findFirst({
+    where: and(eq(snapshots.status, 'complete'), lt(snapshots.period, asOfPeriod)),
+    orderBy: [desc(snapshots.period)],
+    with: {
+      balances: {
+        with: {
+          account: true,
+        },
+      },
+    },
+  });
+}
+
+async function getTransactionImpact(
+  accountId: number,
+  fromDate: Date,
+  toDate: Date
+): Promise<{
+  income: number;
+  expense: number;
+  transferOut: number;
+  transferIn: number;
+}> {
+  const [outgoing, incoming] = await Promise.all([
+    db
+      .select({
+        income: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.direction} = 'income' THEN ${transactions.amountCents} ELSE 0 END), 0)`,
+        expense: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.direction} = 'expense' THEN ${transactions.amountCents} ELSE 0 END), 0)`,
+        transferOut: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.direction} = 'transfer' THEN ${transactions.amountCents} ELSE 0 END), 0)`,
+      })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.accountId, accountId),
+          gte(transactions.occurredOn, fromDate),
+          lte(transactions.occurredOn, toDate)
+        )
+      ),
+    db
+      .select({
+        total: sql<number>`COALESCE(SUM(${transactions.amountCents}), 0)`,
+      })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.targetAccountId, accountId),
+          gte(transactions.occurredOn, fromDate),
+          lte(transactions.occurredOn, toDate)
+        )
+      ),
+  ]);
+
+  return {
+    income: Number(outgoing[0]?.income) || 0,
+    expense: Number(outgoing[0]?.expense) || 0,
+    transferOut: Number(outgoing[0]?.transferOut) || 0,
+    transferIn: Number(incoming[0]?.total) || 0,
+  };
+}
+
+export async function getProjectedAccountBalance(
+  accountId: number,
+  asOfDate: Date = new Date()
+): Promise<{ snapshotBalance: number | null; projectedBalance: number }> {
+  const lastSnapshot = await getLastCompletedSnapshotBefore(asOfDate);
+
+  let snapshotBalance: number | null = null;
+  let transactionStart: Date;
+
+  if (lastSnapshot) {
+    const balance = lastSnapshot.balances.find((b) => b.accountId === accountId);
+    snapshotBalance = balance?.balanceCents ?? null;
+    transactionStart = periodToFirstDay(getNextPeriod(lastSnapshot.period));
+  } else {
+    transactionStart = new Date(0);
+  }
+
+  const base = snapshotBalance ?? 0;
+  const impact = await getTransactionImpact(accountId, transactionStart, asOfDate);
+
+  return {
+    snapshotBalance,
+    projectedBalance: base + impact.income - impact.expense - impact.transferOut + impact.transferIn,
+  };
+}
+
+export async function getProjectedBalances(asOfDate: Date = new Date()): Promise<ProjectedBalance[]> {
+  const lastSnapshot = await getLastCompletedSnapshotBefore(asOfDate);
+  const activeAccounts = await getActiveAccounts();
+
+  let transactionStart: Date;
+  if (lastSnapshot) {
+    transactionStart = periodToFirstDay(getNextPeriod(lastSnapshot.period));
+  } else {
+    transactionStart = new Date(0);
+  }
+
+  const snapshotBalancesByAccount = new Map<number, number>();
+  if (lastSnapshot) {
+    for (const b of lastSnapshot.balances) {
+      snapshotBalancesByAccount.set(b.accountId, b.balanceCents);
+    }
+  }
+
+  const result: ProjectedBalance[] = [];
+  for (const account of activeAccounts) {
+    const impact = await getTransactionImpact(account.id, transactionStart, asOfDate);
+    const snapshotBalance = snapshotBalancesByAccount.get(account.id) ?? null;
+    const base = snapshotBalance ?? 0;
+    const projectedBalance = base + impact.income - impact.expense - impact.transferOut + impact.transferIn;
+
+    result.push({
+      accountId: account.id,
+      name: account.name,
+      kind: account.kind,
+      icon: account.icon,
+      snapshotBalance,
+      projectedBalance,
+      difference: projectedBalance - base,
+    });
+  }
+
+  return result;
+}
+
+export async function getProjectedSummary(asOfDate: Date = new Date()): Promise<ProjectedSummary> {
+  const balances = await getProjectedBalances(asOfDate);
+  const lastSnapshot = await getLastCompletedSnapshotBefore(asOfDate);
+
+  let networth = 0;
+  let liquid = 0;
+  let debts = 0;
+
+  for (const b of balances) {
+    const account = await db.query.accounts.findFirst({
+      where: eq(accounts.id, b.accountId),
+    });
+    if (!account || !account.includeInNetworth) continue;
+
+    if (account.kind === 'liability') {
+      debts += b.projectedBalance;
+      networth -= b.projectedBalance;
+    } else {
+      networth += b.projectedBalance;
+      if (['checking', 'cash', 'savings'].includes(account.kind)) {
+        liquid += b.projectedBalance;
+      }
+    }
+  }
+
+  return {
+    networth,
+    liquid,
+    debts,
+    lastSnapshotPeriod: lastSnapshot?.period ?? null,
+    lastSnapshotDate: lastSnapshot?.recordedAt ?? lastSnapshot?.createdAt ?? null,
+  };
+}
+
+export async function getMonthlyTransactionSummary(
+  period: string
+): Promise<MonthlyTransactionSummary> {
+  const [year, month] = period.split('-').map(Number);
+  const startDate = new Date(year, month - 1, 1);
+  const endDate = new Date(year, month, 1);
+
+  const [outgoing, incoming] = await Promise.all([
+    db
+      .select({
+        income: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.direction} = 'income' THEN ${transactions.amountCents} ELSE 0 END), 0)`,
+        expense: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.direction} = 'expense' THEN ${transactions.amountCents} ELSE 0 END), 0)`,
+        transferOut: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.direction} = 'transfer' THEN ${transactions.amountCents} ELSE 0 END), 0)`,
+      })
+      .from(transactions)
+      .where(
+        and(
+          gte(transactions.occurredOn, startDate),
+          lt(transactions.occurredOn, endDate)
+        )
+      ),
+    db
+      .select({
+        total: sql<number>`COALESCE(SUM(${transactions.amountCents}), 0)`,
+      })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.direction, 'transfer'),
+          gte(transactions.occurredOn, startDate),
+          lt(transactions.occurredOn, endDate)
+        )
+      ),
+  ]);
+
+  const income = Number(outgoing[0]?.income) || 0;
+  const expense = Number(outgoing[0]?.expense) || 0;
+  const transferOut = Number(outgoing[0]?.transferOut) || 0;
+  const transferIn = Number(incoming[0]?.total) || 0;
+
+  return {
+    incomeCents: income,
+    expenseCents: expense,
+    transferOutCents: transferOut,
+    transferInCents: transferIn,
+    balanceCents: income - expense,
+  };
 }

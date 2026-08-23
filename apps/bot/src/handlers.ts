@@ -7,8 +7,8 @@ import {
   transactions,
   categories,
 } from '@finanz/db/schema';
-import { eq, isNull, and, gte, lt, desc } from 'drizzle-orm';
-import { parseExpense } from './parser.js';
+import { eq, isNull, and, gte, lte, lt, desc, sql } from 'drizzle-orm';
+import { parseTransaction } from './parser.js';
 
 interface SessionData {
   step?: string;
@@ -31,6 +31,61 @@ function formatCurrency(cents: number): string {
     style: 'currency',
     currency: 'EUR',
   });
+}
+
+async function getProjectedAccountBalance(accountId: number): Promise<number | null> {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const currentPeriod = `${year}-${month}`;
+
+  const lastSnapshot = await db.query.snapshots.findFirst({
+    where: and(eq(snapshots.status, 'complete'), lt(snapshots.period, currentPeriod)),
+    orderBy: [desc(snapshots.period)],
+    with: { balances: true },
+  });
+
+  if (!lastSnapshot) return null;
+
+  const balance = lastSnapshot.balances.find((b) => b.accountId === accountId);
+  const base = balance?.balanceCents || 0;
+
+  const [yearSnap, monthSnap] = lastSnapshot.period.split('-').map(Number);
+  const transactionStart = new Date(yearSnap, monthSnap, 1);
+
+  const [outgoing, incoming] = await Promise.all([
+    db
+      .select({
+        income: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.direction} = 'income' THEN ${transactions.amountCents} ELSE 0 END), 0)`,
+        expense: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.direction} = 'expense' THEN ${transactions.amountCents} ELSE 0 END), 0)`,
+        transferOut: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.direction} = 'transfer' THEN ${transactions.amountCents} ELSE 0 END), 0)`,
+      })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.accountId, accountId),
+          gte(transactions.occurredOn, transactionStart),
+          lte(transactions.occurredOn, now)
+        )
+      ),
+    db
+      .select({ total: sql<number>`COALESCE(SUM(${transactions.amountCents}), 0)` })
+      .from(transactions)
+      .where(
+        and(
+          eq(transactions.targetAccountId, accountId),
+          gte(transactions.occurredOn, transactionStart),
+          lte(transactions.occurredOn, now)
+        )
+      ),
+  ]);
+
+  const income = Number(outgoing[0]?.income) || 0;
+  const expense = Number(outgoing[0]?.expense) || 0;
+  const transferOut = Number(outgoing[0]?.transferOut) || 0;
+  const transferIn = Number(incoming[0]?.total) || 0;
+
+  return base + income - expense - transferOut + transferIn;
 }
 
 export async function handleStand(ctx: BotContext) {
@@ -66,13 +121,18 @@ export async function handleStand(ctx: BotContext) {
 
   const firstAccount = activeAccounts[0];
   const prevValue = prevBalances[firstAccount.id] || 0;
+  const projectedFirst = await getProjectedAccountBalance(firstAccount.id);
 
-  await ctx.reply(
+  let firstMessage =
     `📊 Monatsabschluss ${formatPeriod(period)}. ${activeAccounts.length} Konten.\n\n` +
-      `${firstAccount.icon || '💰'} ${firstAccount.name}\n` +
-      `Letzter Stand: ${formatCurrency(prevValue)}\n\n` +
-      `Gib den aktuellen Stand ein oder "=" für unverändert:`
-  );
+    `${firstAccount.icon || '💰'} ${firstAccount.name}\n` +
+    `Letzter Stand: ${formatCurrency(prevValue)}`;
+  if (projectedFirst !== null) {
+    firstMessage += `\nLaut Transaktionen erwartet: ${formatCurrency(projectedFirst)}`;
+  }
+  firstMessage += '\n\nGib den aktuellen Stand ein oder "=" für unverändert:';
+
+  await ctx.reply(firstMessage);
 }
 
 export async function handleText(ctx: BotContext) {
@@ -95,8 +155,8 @@ export async function handleText(ctx: BotContext) {
     return;
   }
 
-  // Otherwise, try to parse as expense
-  await handleExpenseInput(ctx, text);
+  // Otherwise, try to parse as transaction
+  await handleTransactionInput(ctx, text);
 }
 
 async function handleSnapshotInput(ctx: BotContext, text: string) {
@@ -141,11 +201,15 @@ async function handleSnapshotInput(ctx: BotContext, text: string) {
     const nextAccount = activeAccounts[index + 1];
     const nextPrevBalance =
       prevSnapshot?.balances.find((b) => b.accountId === nextAccount.id)?.balanceCents || 0;
+    const nextProjected = await getProjectedAccountBalance(nextAccount.id);
 
-    await ctx.reply(
-      `✓ ${nextAccount.icon || '💰'} ${nextAccount.name}\n` +
-        `Letzter Stand: ${formatCurrency(nextPrevBalance)}`
-    );
+    let message = `✓ ${nextAccount.icon || '💰'} ${nextAccount.name}\n` +
+      `Letzter Stand: ${formatCurrency(nextPrevBalance)}`;
+    if (nextProjected !== null) {
+      message += `\nLaut Transaktionen erwartet: ${formatCurrency(nextProjected)}`;
+    }
+
+    await ctx.reply(message);
   } else {
     ctx.session.step = 'snapshot_income';
     await ctx.reply('✓ Alle Konten erfasst.\n\nNettoeinkommen im Monat?');
@@ -241,13 +305,14 @@ async function handleNoteInput(ctx: BotContext, text: string) {
   );
 }
 
-async function handleExpenseInput(ctx: BotContext, text: string) {
-  const result = await parseExpense(text);
+async function handleTransactionInput(ctx: BotContext, text: string) {
+  const result = await parseTransaction(text);
 
   if (!result) {
     await ctx.reply(
       '❓ Konnte ich nicht verarbeiten.\n' +
         'Format: 12,50 Rewe\n' +
+        'Oder: +3000 Gehalt\n' +
         'Oder: 60 tanken'
     );
     return;
@@ -273,7 +338,7 @@ async function handleExpenseInput(ctx: BotContext, text: string) {
     .values({
       occurredOn: result.date,
       amountCents: result.amountCents,
-      direction: 'expense',
+      direction: result.direction,
       categoryId,
       accountId: defaultAccount?.id || null,
       merchant: result.merchant,
@@ -293,15 +358,16 @@ async function handleExpenseInput(ctx: BotContext, text: string) {
 
   const icon = cat?.icon || '❓';
   const catName = cat?.name || 'Sonstiges';
+  const directionIcon = result.direction === 'income' ? '➕' : result.direction === 'expense' ? '➖' : '↔️';
 
   if (result.confidence >= 0.85) {
     await ctx.reply(
-      `✓ ${formatCurrency(result.amountCents)} · ${icon} ${catName}` +
+      `${directionIcon} ${formatCurrency(result.amountCents)} · ${icon} ${catName}` +
         (result.merchant ? ` · ${result.merchant}` : '')
     );
   } else {
     await ctx.reply(
-      `📝 ${formatCurrency(result.amountCents)} · ${icon} ${catName}` +
+      `📝 ${directionIcon} ${formatCurrency(result.amountCents)} · ${icon} ${catName}` +
         (result.merchant ? ` · ${result.merchant}` : '') +
         '\n\n⚠️ Nicht sicher. Stimmt die Kategorie?'
     );
@@ -316,7 +382,6 @@ export async function handleToday(ctx: BotContext) {
 
   const todaysTx = await db.query.transactions.findMany({
     where: and(
-      eq(transactions.direction, 'expense'),
       gte(transactions.occurredOn, today),
       lt(transactions.occurredOn, tomorrow)
     ),
@@ -325,18 +390,28 @@ export async function handleToday(ctx: BotContext) {
   });
 
   if (todaysTx.length === 0) {
-    await ctx.reply('📊 Heute noch keine Ausgaben erfasst.');
+    await ctx.reply('📊 Heute noch keine Transaktionen erfasst.');
     return;
   }
 
-  const total = todaysTx.reduce((sum, tx) => sum + tx.amountCents, 0);
+  const income = todaysTx
+    .filter((tx) => tx.direction === 'income')
+    .reduce((sum, tx) => sum + tx.amountCents, 0);
+  const expense = todaysTx
+    .filter((tx) => tx.direction === 'expense')
+    .reduce((sum, tx) => sum + tx.amountCents, 0);
   const lines = todaysTx.map((tx) => {
     const icon = tx.category?.icon || '❓';
-    return `${icon} ${formatCurrency(tx.amountCents)} ${tx.merchant || tx.category?.name || ''}`;
+    const dirIcon = tx.direction === 'income' ? '➕' : tx.direction === 'expense' ? '➖' : '↔️';
+    return `${dirIcon} ${icon} ${formatCurrency(tx.amountCents)} ${tx.merchant || tx.category?.name || ''}`;
   });
 
   await ctx.reply(
-    `📊 Heute: ${formatCurrency(total)}\n\n` + lines.join('\n')
+    `📊 Heute\n` +
+      `Einnahmen: ${formatCurrency(income)}\n` +
+      `Ausgaben: ${formatCurrency(expense)}\n` +
+      `Saldo: ${formatCurrency(income - expense)}\n\n` +
+      lines.join('\n')
   );
 }
 
@@ -348,17 +423,23 @@ export async function handleMonth(ctx: BotContext) {
 
   const monthTx = await db.query.transactions.findMany({
     where: and(
-      eq(transactions.direction, 'expense'),
       gte(transactions.occurredOn, startDate),
       lt(transactions.occurredOn, endDate)
     ),
   });
 
-  const tracked = monthTx.reduce((sum, tx) => sum + tx.amountCents, 0);
+  const income = monthTx
+    .filter((tx) => tx.direction === 'income')
+    .reduce((sum, tx) => sum + tx.amountCents, 0);
+  const expense = monthTx
+    .filter((tx) => tx.direction === 'expense')
+    .reduce((sum, tx) => sum + tx.amountCents, 0);
 
   await ctx.reply(
     `📊 ${formatPeriod(period)}\n\n` +
-      `Erfasst: ${formatCurrency(tracked)}\n` +
+      `Einnahmen: ${formatCurrency(income)}\n` +
+      `Ausgaben: ${formatCurrency(expense)}\n` +
+      `Saldo: ${formatCurrency(income - expense)}\n` +
       `Transaktionen: ${monthTx.length}`
   );
 }

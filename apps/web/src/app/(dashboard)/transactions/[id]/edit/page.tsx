@@ -41,6 +41,7 @@ export default async function EditTransactionPage({ params }: EditTransactionPag
           direction: tx.direction,
           categoryId: tx.categoryId,
           accountId: tx.accountId,
+          targetAccountId: tx.targetAccountId,
           merchant: tx.merchant,
           note: tx.note,
         }}

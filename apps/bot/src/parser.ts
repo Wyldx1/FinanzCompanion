@@ -3,9 +3,10 @@ import { categories, quickActions } from '@finanz/db/schema';
 import { eq, isNull } from 'drizzle-orm';
 import Anthropic from '@anthropic-ai/sdk';
 
-export interface ParsedExpense {
+export interface ParsedTransaction {
   amountCents: number;
   date: Date;
+  direction: 'expense' | 'income';
   merchant: string | null;
   category: string | null;
   note: string | null;
@@ -58,6 +59,25 @@ function parseDate(text: string): Date {
   return now;
 }
 
+const INCOME_KEYWORDS = ['gehalt', 'lohn', 'kindergeld', 'überstunden', 'überweisung', 'einnahme', 'zinsen', 'dividende', 'rückzahlung'];
+
+function detectDirection(text: string): 'expense' | 'income' {
+  const lower = text.toLowerCase();
+
+  // Explicit plus sign indicates income
+  if (/\+\s*\d/.test(text) || /^\s*\+/.test(text)) {
+    return 'income';
+  }
+
+  for (const keyword of INCOME_KEYWORDS) {
+    if (lower.includes(keyword)) {
+      return 'income';
+    }
+  }
+
+  return 'expense';
+}
+
 async function findCategoryByKeyword(text: string): Promise<string | null> {
   const lower = text.toLowerCase();
 
@@ -99,26 +119,30 @@ async function findCategoryByKeyword(text: string): Promise<string | null> {
   return null;
 }
 
-export async function parseExpense(text: string): Promise<ParsedExpense | null> {
+export async function parseTransaction(text: string): Promise<ParsedTransaction | null> {
+  const direction = detectDirection(text);
+  // Strip leading plus sign for amount parsing
+  const sanitizedText = text.replace(/^\s*\+/, '').replace(/(\s|^)\+\s*(?=\d)/, '$1');
+
   let amountCents: number | null = null;
-  let restText = text;
+  let restText = sanitizedText;
   let date = new Date();
 
   // Try date prefix pattern first
-  const dateMatch = text.match(AMOUNT_PATTERNS[2]);
+  const dateMatch = sanitizedText.match(AMOUNT_PATTERNS[2]);
   if (dateMatch) {
     date = parseDate(dateMatch[1]);
     amountCents = parseAmount(dateMatch[2]);
     restText = dateMatch[3];
   } else {
     // Try amount at start
-    const startMatch = text.match(AMOUNT_PATTERNS[0]);
+    const startMatch = sanitizedText.match(AMOUNT_PATTERNS[0]);
     if (startMatch) {
       amountCents = parseAmount(startMatch[1]);
       restText = startMatch[2];
     } else {
       // Try amount at end
-      const endMatch = text.match(AMOUNT_PATTERNS[1]);
+      const endMatch = sanitizedText.match(AMOUNT_PATTERNS[1]);
       if (endMatch) {
         restText = endMatch[1];
         amountCents = parseAmount(endMatch[2]);
@@ -128,7 +152,7 @@ export async function parseExpense(text: string): Promise<ParsedExpense | null> 
 
   if (amountCents === null) {
     // Try LLM fallback
-    return await llmParse(text);
+    return await llmParse(text, direction);
   }
 
   // Find category by keyword
@@ -159,6 +183,7 @@ export async function parseExpense(text: string): Promise<ParsedExpense | null> 
   return {
     amountCents,
     date,
+    direction,
     merchant,
     category,
     note,
@@ -166,7 +191,7 @@ export async function parseExpense(text: string): Promise<ParsedExpense | null> 
   };
 }
 
-async function llmParse(text: string): Promise<ParsedExpense | null> {
+async function llmParse(text: string, fallbackDirection: 'expense' | 'income'): Promise<ParsedTransaction | null> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     console.log('No API key, skipping LLM parse');
@@ -188,7 +213,7 @@ async function llmParse(text: string): Promise<ParsedExpense | null> {
       messages: [
         {
           role: 'user',
-          content: `Parse this German expense text and return JSON only. Available categories: ${categoryNames}
+          content: `Parse this German financial text and return JSON only. Available categories: ${categoryNames}
 
 Text: "${text}"
 
@@ -196,6 +221,7 @@ Return JSON:
 {
   "amount_cents": number,
   "date": "YYYY-MM-DD",
+  "direction": "expense" | "income",
   "merchant": string or null,
   "category": one of the available categories or null,
   "note": string or null,
@@ -213,6 +239,7 @@ Return JSON:
     return {
       amountCents: json.amount_cents,
       date: new Date(json.date),
+      direction: json.direction === 'income' ? 'income' : fallbackDirection,
       merchant: json.merchant,
       category: json.category,
       note: json.note,

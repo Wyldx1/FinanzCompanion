@@ -11,6 +11,7 @@ const updateSchema = z.object({
   direction: z.enum(['expense', 'income', 'transfer']).optional(),
   categoryId: z.number().nullable().optional(),
   accountId: z.number().nullable().optional(),
+  targetAccountId: z.number().nullable().optional(),
   merchant: z.string().nullable().optional(),
   note: z.string().nullable().optional(),
   confirmed: z.boolean().optional(),
@@ -25,7 +26,7 @@ export async function GET(
 
   const tx = await db.query.transactions.findFirst({
     where: eq(transactions.id, parseInt(id)),
-    with: { category: true, account: true },
+    with: { category: true, account: true, targetAccount: true },
   });
 
   if (!tx) {

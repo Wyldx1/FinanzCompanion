@@ -32,6 +32,7 @@ interface TransactionFormProps {
     direction: 'expense' | 'income' | 'transfer';
     categoryId: number | null;
     accountId: number | null;
+    targetAccountId: number | null;
     merchant: string | null;
     note: string | null;
   };
@@ -57,6 +58,7 @@ export function TransactionForm({ categories, accounts, initialData, isEdit = fa
   );
   const [categoryId, setCategoryId] = useState<number | null>(initialData?.categoryId || null);
   const [accountId, setAccountId] = useState<number | null>(initialData?.accountId || accounts.find(a => a)?.id || null);
+  const [targetAccountId, setTargetAccountId] = useState<number | null>(initialData?.targetAccountId || null);
   const [merchant, setMerchant] = useState(initialData?.merchant || '');
   const [note, setNote] = useState(initialData?.note || '');
   const [loading, setLoading] = useState(false);
@@ -87,6 +89,7 @@ export function TransactionForm({ categories, accounts, initialData, isEdit = fa
           direction,
           categoryId: categoryId || null,
           accountId: accountId || null,
+          targetAccountId: direction === 'transfer' ? targetAccountId || null : null,
           merchant: merchant || null,
           note: note || null,
         }),
@@ -208,7 +211,9 @@ export function TransactionForm({ categories, accounts, initialData, isEdit = fa
 
           {/* Account Selection */}
           <div className="space-y-3">
-            <label className="text-sm font-medium text-muted-foreground">Konto</label>
+            <label className="text-sm font-medium text-muted-foreground">
+              {direction === 'transfer' ? 'Von Konto' : 'Konto'}
+            </label>
             <div className="flex flex-wrap gap-2">
               {accounts.map((acc) => (
                 <button
@@ -228,6 +233,32 @@ export function TransactionForm({ categories, accounts, initialData, isEdit = fa
               ))}
             </div>
           </div>
+
+          {direction === 'transfer' && (
+            <div className="space-y-3">
+              <label className="text-sm font-medium text-muted-foreground">Auf Konto</label>
+              <div className="flex flex-wrap gap-2">
+                {accounts
+                  .filter((acc) => acc.id !== accountId)
+                  .map((acc) => (
+                    <button
+                      key={acc.id}
+                      type="button"
+                      onClick={() => setTargetAccountId(acc.id)}
+                      className={cn(
+                        'px-4 py-2 rounded-xl border-2 transition-all duration-300 flex items-center gap-2',
+                        targetAccountId === acc.id
+                          ? 'border-primary bg-primary/10'
+                          : 'border-border hover:border-primary/50'
+                      )}
+                    >
+                      <span>{acc.icon || '💰'}</span>
+                      <span className="text-sm">{acc.name}</span>
+                    </button>
+                  ))}
+              </div>
+            </div>
+          )}
 
           {/* Merchant */}
           <div className="space-y-3">

@@ -11,6 +11,7 @@ const transactionSchema = z.object({
   direction: z.enum(['expense', 'income', 'transfer']),
   categoryId: z.number().nullable().optional(),
   accountId: z.number().nullable().optional(),
+  targetAccountId: z.number().nullable().optional(),
   merchant: z.string().nullable().optional(),
   note: z.string().nullable().optional(),
 });
@@ -32,7 +33,7 @@ export async function GET(request: NextRequest) {
 
     const allTransactions = await db.query.transactions.findMany({
       where: conditions.length > 0 ? and(...conditions) : undefined,
-      with: { category: true, account: true },
+      with: { category: true, account: true, targetAccount: true },
       orderBy: [desc(transactions.occurredOn), desc(transactions.createdAt)],
       limit,
     });
