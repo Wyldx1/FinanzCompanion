@@ -26,11 +26,11 @@ const updateSchema = z.object({
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   const session = await requireAuthApi();
   if (session instanceof NextResponse) return session;
-  const { id } = await params;
+  const { id } = params;
 
   const account = await db.query.accounts.findFirst({
     where: eq(accounts.id, parseInt(id)),
@@ -48,11 +48,11 @@ export async function GET(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   const session = await requireAuthApi();
   if (session instanceof NextResponse) return session;
-  const { id } = await params;
+  const { id } = params;
 
   try {
     const body = await request.json();
@@ -115,11 +115,11 @@ export async function PATCH(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  { params }: { params: { id: string } }
 ) {
   const session = await requireAuthApi();
   if (session instanceof NextResponse) return session;
-  const { id } = await params;
+  const { id } = params;
 
   const hard = request.nextUrl.searchParams.get('hard') === 'true';
 

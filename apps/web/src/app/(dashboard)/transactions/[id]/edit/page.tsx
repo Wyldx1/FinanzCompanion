@@ -5,11 +5,11 @@ import { notFound } from 'next/navigation';
 import { TransactionForm } from '@/components/transaction-form';
 
 interface EditTransactionPageProps {
-  params: Promise<{ id: string }>;
+  params: { id: string };
 }
 
 export default async function EditTransactionPage({ params }: EditTransactionPageProps) {
-  const { id } = await params;
+  const { id } = params;
 
   const [tx, allCategories, allAccounts] = await Promise.all([
     db.query.transactions.findFirst({

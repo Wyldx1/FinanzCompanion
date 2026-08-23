@@ -32,11 +32,11 @@ const statusConfig = {
 };
 
 interface SnapshotDetailPageProps {
-  params: Promise<{ period: string }>;
+  params: { period: string };
 }
 
 export default async function SnapshotDetailPage({ params }: SnapshotDetailPageProps) {
-  const { period } = await params;
+  const { period } = params;
 
   const snapshot = await db.query.snapshots.findFirst({
     where: eq(snapshots.period, period),

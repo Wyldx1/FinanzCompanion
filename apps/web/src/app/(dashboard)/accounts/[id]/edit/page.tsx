@@ -5,11 +5,11 @@ import { notFound } from 'next/navigation';
 import { AccountForm } from '@/components/account-form';
 
 interface EditAccountPageProps {
-  params: Promise<{ id: string }>;
+  params: { id: string };
 }
 
 export default async function EditAccountPage({ params }: EditAccountPageProps) {
-  const { id } = await params;
+  const { id } = params;
 
   const account = await db.query.accounts.findFirst({
     where: eq(accounts.id, parseInt(id)),

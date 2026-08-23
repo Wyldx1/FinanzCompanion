@@ -5,11 +5,11 @@ import { notFound } from 'next/navigation';
 import { GoalForm } from '@/components/goal-form';
 
 interface EditGoalPageProps {
-  params: Promise<{ id: string }>;
+  params: { id: string };
 }
 
 export default async function EditGoalPage({ params }: EditGoalPageProps) {
-  const { id } = await params;
+  const { id } = params;
 
   const [goal, allAccounts] = await Promise.all([
     db.query.goals.findFirst({
