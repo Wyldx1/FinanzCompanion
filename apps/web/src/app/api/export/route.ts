@@ -14,38 +14,69 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Export all data
-  const [accounts, snapshots, transactions, categories, goals, debts, adviceLogs] =
-    await Promise.all([
-      db.query.accounts.findMany(),
-      db.query.snapshots.findMany({
-        with: { balances: true },
-      }),
-      db.query.transactions.findMany(),
-      db.query.categories.findMany(),
-      db.query.goals.findMany({
-        with: { contributions: true },
-      }),
-      db.query.debts.findMany(),
-      db.query.adviceLog.findMany(),
-    ]);
-
-  const exportData = {
-    exportedAt: new Date().toISOString(),
-    version: '1.0',
+  // Export all user data (exclude auth/session/audit infrastructure)
+  const [
     accounts,
     snapshots,
     transactions,
     categories,
+    quickActions,
+    recurringExpenses,
     goals,
     debts,
+    vehicles,
+    fuelEntries,
+    workTimeEntries,
+    weightEntries,
+    moduleSettings,
     adviceLogs,
+    commitmentResults,
+  ] = await Promise.all([
+    db.query.accounts.findMany(),
+    db.query.snapshots.findMany({
+      with: { balances: true },
+    }),
+    db.query.transactions.findMany(),
+    db.query.categories.findMany(),
+    db.query.quickActions.findMany(),
+    db.query.recurringExpenses.findMany(),
+    db.query.goals.findMany({
+      with: { contributions: true },
+    }),
+    db.query.debts.findMany(),
+    db.query.vehicles.findMany(),
+    db.query.fuelEntries.findMany(),
+    db.query.workTimeEntries.findMany(),
+    db.query.weightEntries.findMany(),
+    db.query.moduleSettings.findMany(),
+    db.query.adviceLog.findMany(),
+    db.query.commitmentResults.findMany(),
+  ]);
+
+  const exportData = {
+    exportedAt: new Date().toISOString(),
+    version: '2.0',
+    accounts,
+    snapshots,
+    transactions,
+    categories,
+    quickActions,
+    recurringExpenses,
+    goals,
+    debts,
+    vehicles,
+    fuelEntries,
+    workTimeEntries,
+    weightEntries,
+    moduleSettings,
+    adviceLogs,
+    commitmentResults,
   };
 
   return new NextResponse(JSON.stringify(exportData, null, 2), {
     headers: {
       'Content-Type': 'application/json',
-      'Content-Disposition': `attachment; filename="finanz-export-${new Date().toISOString().split('T')[0]}.json"`,
+      'Content-Disposition': `attachment; filename="finanz-backup-${new Date().toISOString().split('T')[0]}.json"`,
     },
   });
 }

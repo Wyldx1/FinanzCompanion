@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { LogoutButton } from '@/components/logout-button';
+import { BackupImport } from '@/components/backup-import';
 import { db } from '@/lib/db';
 import { categories, moduleSettings } from '@finanz/db/schema';
 import { isNull, asc } from 'drizzle-orm';
@@ -16,6 +17,7 @@ import {
   FileJson,
   FileSpreadsheet,
   LogOut,
+  Upload,
 } from 'lucide-react';
 import Link from 'next/link';
 
@@ -191,25 +193,26 @@ export default async function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Data Export Section */}
+      {/* Backup Section */}
       <Card className="glass hover-lift overflow-hidden">
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Download className="h-5 w-5 text-[hsl(262,83%,75%)]" />
-            Datenexport
+            Backup & Wiederherstellung
           </CardTitle>
-          <CardDescription>Exportiere deine Daten</CardDescription>
+          <CardDescription>Exportiere oder importiere alle Daten</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-6">
+          {/* Export */}
           <div className="flex items-center justify-between p-4 rounded-xl bg-secondary/50">
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 rounded-xl bg-[hsl(262,83%,75%)]/10 flex items-center justify-center">
                 <FileJson className="h-5 w-5 text-[hsl(262,83%,75%)]" />
               </div>
               <div>
-                <p className="font-medium">JSON Export</p>
+                <p className="font-medium">Backup erstellen</p>
                 <p className="text-sm text-muted-foreground">
-                  Vollständiger Export aller Daten als JSON
+                  Vollständiger JSON-Export aller Daten
                 </p>
               </div>
             </div>
@@ -219,12 +222,29 @@ export default async function SettingsPage() {
               asChild
             >
               <a href="/api/export?format=json" download>
+                <Download className="mr-2 h-4 w-4" />
                 Exportieren
               </a>
             </Button>
           </div>
 
-          <div className="flex items-center justify-between p-4 rounded-xl bg-secondary/50">
+          {/* Import */}
+          <div className="p-4 rounded-xl bg-secondary/50">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="w-10 h-10 rounded-xl bg-[hsl(45,90%,70%)]/10 flex items-center justify-center">
+                <Upload className="h-5 w-5 text-[hsl(45,90%,70%)]" />
+              </div>
+              <div>
+                <p className="font-medium">Backup wiederherstellen</p>
+                <p className="text-sm text-muted-foreground">
+                  Importiert eine zuvor erstellte JSON-Datei
+                </p>
+              </div>
+            </div>
+            <BackupImport />
+          </div>
+
+          <div className="flex items-center justify-between p-4 rounded-xl bg-secondary/50 opacity-60">
             <div className="flex items-center gap-4">
               <div className="w-10 h-10 rounded-xl bg-[hsl(172,66%,65%)]/10 flex items-center justify-center">
                 <FileSpreadsheet className="h-5 w-5 text-[hsl(172,66%,65%)]" />
@@ -236,7 +256,7 @@ export default async function SettingsPage() {
                 </p>
               </div>
             </div>
-            <Button variant="outline" disabled className="opacity-50">
+            <Button variant="outline" disabled>
               Bald verfügbar
             </Button>
           </div>
