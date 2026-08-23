@@ -5,8 +5,8 @@ import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { ArrowLeft, Check, Loader2, Sparkles, Building2 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { ArrowLeft, Check, Loader2, Sparkles, Building2, Euro } from 'lucide-react';
+import { cn, parseCurrency } from '@/lib/utils';
 
 const accountKinds = [
   { value: 'checking', label: 'Girokonto', icon: '🏦', description: 'Hauptkonto für tägliche Ausgaben' },
@@ -40,30 +40,49 @@ export function AccountForm({ initialData, isEdit = false, defaultKind }: Accoun
   const [includeInNetworth, setIncludeInNetworth] = useState(initialData?.includeInNetworth ?? true);
   const [isDefaultPayment, setIsDefaultPayment] = useState(initialData?.isDefaultPayment ?? false);
   const [notes, setNotes] = useState(initialData?.notes || '');
+  const [initialBalance, setInitialBalance] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const showInitialBalance = !isEdit && kind === 'liability';
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError('');
     setLoading(true);
 
+    let initialBalanceCents: number | null = null;
+    if (showInitialBalance && initialBalance.trim()) {
+      const parsed = parseCurrency(initialBalance);
+      if (parsed === null) {
+        setError('Bitte einen gültigen Betrag für den aktuellen Stand eingeben');
+        setLoading(false);
+        return;
+      }
+      initialBalanceCents = parsed;
+    }
+
     try {
       const url = isEdit ? `/api/accounts/${initialData?.id}` : '/api/accounts';
       const method = isEdit ? 'PATCH' : 'POST';
 
+      const body: Record<string, unknown> = {
+        name,
+        kind,
+        institution: institution || null,
+        icon: accountKinds.find((k) => k.value === kind)?.icon,
+        includeInNetworth,
+        isDefaultPayment,
+        notes: notes || null,
+      };
+      if (initialBalanceCents !== null) {
+        body.initialBalanceCents = initialBalanceCents;
+      }
+
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name,
-          kind,
-          institution: institution || null,
-          icon: accountKinds.find((k) => k.value === kind)?.icon,
-          includeInNetworth,
-          isDefaultPayment,
-          notes: notes || null,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!res.ok) {
@@ -145,6 +164,32 @@ export function AccountForm({ initialData, isEdit = false, defaultKind }: Accoun
               className="h-12"
             />
           </div>
+
+          {/* Initial balance for liability accounts */}
+          {showInitialBalance && (
+            <div className="space-y-3">
+              <label className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+                <Euro className="h-4 w-4" />
+                Aktueller Stand (optional)
+              </label>
+              <div className="relative">
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  value={initialBalance}
+                  onChange={(e) => setInitialBalance(e.target.value)}
+                  placeholder="z.B. 12.500,00"
+                  className="h-12 pr-16"
+                />
+                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-muted-foreground text-sm">
+                  EUR
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Wird als aktueller Monatsabschluss für diese Schuld gespeichert.
+              </p>
+            </div>
+          )}
 
           {/* Options */}
           <div className="space-y-3">
