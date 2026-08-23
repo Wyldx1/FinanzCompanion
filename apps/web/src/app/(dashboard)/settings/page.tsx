@@ -4,6 +4,7 @@ import { LogoutButton } from '@/components/logout-button';
 import { BackupImport } from '@/components/backup-import';
 import { db } from '@/lib/db';
 import { categories, moduleSettings } from '@finanz/db/schema';
+import { isModuleEnabledByDefault } from '@/lib/mode';
 import { isNull, asc } from 'drizzle-orm';
 import {
   User,
@@ -32,7 +33,7 @@ export default async function SettingsPage() {
 
   const getModuleSetting = (key: string) => {
     const setting = settings.find(s => s.moduleId === key);
-    return setting?.enabled ?? false;
+    return setting?.enabled ?? isModuleEnabledByDefault(key);
   };
 
   return (

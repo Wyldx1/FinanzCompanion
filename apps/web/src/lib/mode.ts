@@ -2,6 +2,21 @@ import { db } from './db';
 import { moduleSettings } from '@finanz/db/schema';
 import { eq } from 'drizzle-orm';
 
+// Module, die standardmäßig aktiv sind, solange sie nicht explizit deaktiviert wurden.
+// Damit bleiben Features bei bestehenden Datenbanken sichtbar, bevor ein Seed sie anlegt.
+const DEFAULT_ENABLED_MODULES = [
+  'core',
+  'transactions',
+  'debts',
+  'goals',
+  'coach',
+  'telegram',
+  'reminder_enabled',
+  'fuel',
+  'worktime',
+  'weight',
+];
+
 async function getModuleConfig(moduleId: string): Promise<Record<string, unknown>> {
   const setting = await db.query.moduleSettings.findFirst({
     where: eq(moduleSettings.moduleId, moduleId),
@@ -45,8 +60,26 @@ export async function resetOnboarding(): Promise<void> {
 }
 
 export async function getEnabledModules(): Promise<string[]> {
-  const settings = await db.query.moduleSettings.findMany({
-    where: eq(moduleSettings.enabled, true),
-  });
-  return settings.map((s) => s.moduleId);
+  const settings = await db.query.moduleSettings.findMany();
+  const enabled = new Set<string>();
+
+  for (const moduleId of DEFAULT_ENABLED_MODULES) {
+    const setting = settings.find((s) => s.moduleId === moduleId);
+    if (!setting || setting.enabled) {
+      enabled.add(moduleId);
+    }
+  }
+
+  // Zusätzlich alle Module, die explizit in der DB aktiviert sind.
+  for (const setting of settings) {
+    if (setting.enabled) {
+      enabled.add(setting.moduleId);
+    }
+  }
+
+  return Array.from(enabled);
+}
+
+export function isModuleEnabledByDefault(moduleId: string): boolean {
+  return DEFAULT_ENABLED_MODULES.includes(moduleId);
 }
