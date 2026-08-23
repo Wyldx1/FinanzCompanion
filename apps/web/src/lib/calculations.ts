@@ -1,5 +1,5 @@
 import { db } from './db';
-import { accounts, categories, snapshots, snapshotBalances, transactions } from '@finanz/db/schema';
+import { accounts, categories, recurringExpenses, snapshots, snapshotBalances, transactions } from '@finanz/db/schema';
 import { eq, and, gte, lte, lt, desc, isNull, sql } from 'drizzle-orm';
 import { getPreviousPeriod } from './utils';
 
@@ -549,4 +549,49 @@ export async function getMonthlyTransactionSummary(
   };
 }
 
+export interface RecurringPlan {
+  incomeCents: number;
+  expenseCents: number;
+  activeCount: number;
+}
+
+export async function getRecurringPlan(period: string): Promise<RecurringPlan> {
+  const items = await db.query.recurringExpenses.findMany({
+    where: eq(recurringExpenses.active, true),
+  });
+
+  const activeItems = items.filter(
+    (item) =>
+      period >= item.startPeriod &&
+      (!item.endPeriod || period <= item.endPeriod)
+  );
+
+  const income = activeItems
+    .filter((item) => item.direction === 'income')
+    .reduce((sum, item) => sum + item.amountCents, 0);
+  const expense = activeItems
+    .filter((item) => item.direction === 'expense')
+    .reduce((sum, item) => sum + item.amountCents, 0);
+
+  return {
+    incomeCents: income,
+    expenseCents: expense,
+    activeCount: activeItems.length,
+  };
+}
+
+export async function getProjectedMonthlyBalance(period: string): Promise<{
+  incomeCents: number;
+  expenseCents: number;
+  balanceCents: number;
+}> {
+  const txSummary = await getMonthlyTransactionSummary(period);
+  const recurring = await getRecurringPlan(period);
+
+  return {
+    incomeCents: txSummary.incomeCents + recurring.incomeCents,
+    expenseCents: txSummary.expenseCents + recurring.expenseCents,
+    balanceCents: txSummary.balanceCents + recurring.incomeCents - recurring.expenseCents,
+  };
+}
 

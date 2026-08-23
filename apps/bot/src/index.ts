@@ -200,14 +200,15 @@ bot.command('start', async (ctx) => {
     '👋 Willkommen beim Finanz-Companion!\n\n' +
       'Verfügbare Befehle:\n' +
       '/stand - Monatsabschluss erfassen\n' +
-      '/transaktion - Ausgabe mit Bar/Karte-Buttons\n' +
-      '/einkommen - Einkommen erfassen\n' +
+      '/transaktion - Ausgabe: Betrag → Datum → Bar/Karte-Buttons → Beschreibung\n' +
+      '/einkommen - Einkommen: Betrag → Art (Gehalt/Kindergeld/Überstunden/Sonstiges) → Datum → Notiz\n' +
       '/tanken - Tank- oder Ladevorgang erfassen\n' +
-      '/gewicht - Gewicht eintragen\n' +
-      '/bericht - Arbeitszeit / Baustellenbericht\n' +
+      '/gewicht - Gewicht eintragen (optional mit Notiz)\n' +
+      '/bericht - Arbeitszeit / Baustellenbericht (Startzeit-Vorschlag 07:30)\n' +
       '/heute - Ausgaben von heute\n' +
       '/monat - Monatszwischenstand\n' +
       '/undo - Letzte Eingabe rückgängig\n' +
+      '/abbruch - Aktuellen Dialog abbrechen\n' +
       '/hilfe - Diese Hilfe anzeigen\n\n' +
       'Oder schreib einfach deine Ausgaben:\n' +
       '14,80 Rewe\n' +
@@ -219,14 +220,15 @@ bot.command('hilfe', async (ctx) => {
   await ctx.reply(
     '📊 Finanz-Companion Befehle:\n\n' +
       '/stand - Monatsabschluss erfassen\n' +
-      '/transaktion - Ausgabe mit Bar/Karte-Buttons\n' +
-      '/einkommen - Einkommen erfassen\n' +
+      '/transaktion - Ausgabe: Betrag → Datum → Bar/Karte-Buttons → Beschreibung\n' +
+      '/einkommen - Einkommen: Betrag → Art (Gehalt/Kindergeld/Überstunden/Sonstiges) → Datum → Notiz\n' +
       '/tanken - Tank- oder Ladevorgang erfassen\n' +
-      '/gewicht - Gewicht eintragen\n' +
-      '/bericht - Arbeitszeit / Baustellenbericht\n' +
+      '/gewicht - Gewicht eintragen (optional mit Notiz)\n' +
+      '/bericht - Arbeitszeit / Baustellenbericht (Startzeit-Vorschlag 07:30)\n' +
       '/heute - Ausgaben von heute\n' +
       '/monat - Monatszwischenstand\n' +
-      '/undo - Letzte Eingabe rückgängig\n\n' +
+      '/undo - Letzte Eingabe rückgängig\n' +
+      '/abbruch - Aktuellen Dialog abbrechen\n\n' +
       'Schnellerfassung:\n' +
       '14,80 Rewe → Lebensmittel\n' +
       '60 tanken → Tanken\n' +

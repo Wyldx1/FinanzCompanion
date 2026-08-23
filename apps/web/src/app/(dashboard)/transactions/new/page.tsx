@@ -3,7 +3,11 @@ import { categories, accounts } from '@finanz/db/schema';
 import { isNull, asc } from 'drizzle-orm';
 import { TransactionForm } from '@/components/transaction-form';
 
-export default async function NewTransactionPage() {
+interface NewTransactionPageProps {
+  searchParams: { [key: string]: string | string[] | undefined };
+}
+
+export default async function NewTransactionPage({ searchParams }: NewTransactionPageProps) {
   const [allCategories, allAccounts] = await Promise.all([
     db.query.categories.findMany({
       where: isNull(categories.archivedAt),
@@ -15,9 +19,25 @@ export default async function NewTransactionPage() {
     }),
   ]);
 
+  const accountIdParam = searchParams.accountId;
+  const directionParam = searchParams.direction;
+  const noteParam = searchParams.note;
+
+  const defaultValues: {
+    direction?: 'expense' | 'income' | 'transfer';
+    accountId?: number | null;
+    note?: string | null;
+  } = {
+    accountId: typeof accountIdParam === 'string' ? parseInt(accountIdParam, 10) || null : null,
+    direction: directionParam === 'expense' || directionParam === 'income' || directionParam === 'transfer'
+      ? directionParam
+      : undefined,
+    note: typeof noteParam === 'string' ? noteParam : null,
+  };
+
   return (
     <div className="max-w-lg mx-auto">
-      <TransactionForm categories={allCategories} accounts={allAccounts} />
+      <TransactionForm categories={allCategories} accounts={allAccounts} defaultValues={defaultValues} />
     </div>
   );
 }

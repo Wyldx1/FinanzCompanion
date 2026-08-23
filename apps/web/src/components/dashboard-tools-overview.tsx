@@ -1,7 +1,7 @@
 'use client';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Fuel, Zap, HardHat, Scale, Wrench, TrendingUp, Droplets, Calendar, Repeat } from 'lucide-react';
+import { Fuel, Zap, HardHat, Scale, Wrench, TrendingUp, Droplets, Calendar, Repeat, TrendingDown } from 'lucide-react';
 import { formatCurrency, formatMinutes, getCurrentPeriod } from '@/lib/utils';
 import Link from 'next/link';
 
@@ -58,6 +58,7 @@ interface DashboardToolsOverviewProps {
   workTimeEntries: WorkTimeEntry[];
   weightEntries: WeightEntry[];
   recurringExpenses: RecurringExpense[];
+  debtsCents: number;
 }
 
 function getWeekRange(date: Date): { start: Date; end: Date } {
@@ -83,6 +84,7 @@ export function DashboardToolsOverview({
   workTimeEntries,
   weightEntries,
   recurringExpenses,
+  debtsCents,
 }: DashboardToolsOverviewProps) {
   const now = new Date();
   const currentPeriod = getCurrentPeriod();
@@ -101,12 +103,12 @@ export function DashboardToolsOverview({
     .filter((r) => r.direction === 'expense')
     .reduce((sum, r) => sum + r.amountCents, 0);
 
-  // Work time this week
-  const weekRange = getWeekRange(now);
-  const weekWork = workTimeEntries
+  // Work time current month
+  const monthRange = getMonthRange(now);
+  const monthWork = workTimeEntries
     .filter((e) => {
       const d = new Date(e.date);
-      return d >= weekRange.start && d < weekRange.end;
+      return d >= monthRange.start && d < monthRange.end;
     })
     .reduce(
       (acc, e) => ({
@@ -132,13 +134,15 @@ export function DashboardToolsOverview({
       ? last7DaysWeights.reduce((sum, e) => sum + e.weightKg, 0) / last7DaysWeights.length
       : null;
 
+  // Latest fuel entry
+  const latestFuelEntry = fuelEntries[0] ?? null;
+
   // Fuel per vehicle
   const vehiclesMap = new Map<number, Vehicle>();
   for (const entry of fuelEntries) {
     vehiclesMap.set(entry.vehicleId, entry.vehicle);
   }
 
-  const monthRange = getMonthRange(now);
   const monthFuelCost = fuelEntries
     .filter((e) => {
       const d = new Date(e.date);
@@ -187,7 +191,9 @@ export function DashboardToolsOverview({
     workTimeEntries.length > 0 ||
     weightEntries.length > 0 ||
     fuelEntries.length > 0 ||
-    repairs.length > 0;
+    repairs.length > 0 ||
+    recurringExpenses.length > 0 ||
+    debtsCents > 0;
 
   if (!hasAnyData) {
     return null;
@@ -208,10 +214,10 @@ export function DashboardToolsOverview({
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div className="min-w-0">
-                    <p className="text-sm text-muted-foreground truncate">Arbeitszeit diese Woche</p>
-                    <p className="text-xl font-bold mt-1 truncate">{formatMinutes(weekWork.netMinutes)}</p>
-                    <p className={`text-xs mt-1 truncate ${weekWork.overtimeMinutes >= 0 ? 'text-[hsl(172,66%,65%)]' : 'text-[hsl(330,80%,75%)]'}`}>
-                      {formatMinutes(weekWork.overtimeMinutes)} Überstunden
+                    <p className="text-sm text-muted-foreground truncate">Arbeitszeit {now.toLocaleDateString('de-DE', { month: 'short' })}</p>
+                    <p className="text-xl font-bold mt-1 truncate">{formatMinutes(monthWork.netMinutes)}</p>
+                    <p className={`text-xs mt-1 truncate ${monthWork.overtimeMinutes >= 0 ? 'text-[hsl(172,66%,65%)]' : 'text-[hsl(330,80%,75%)]'}`}>
+                      {formatMinutes(monthWork.overtimeMinutes)} Überstunden
                     </p>
                   </div>
                   <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center flex-shrink-0">
@@ -240,6 +246,50 @@ export function DashboardToolsOverview({
                   </div>
                   <div className="w-12 h-12 rounded-xl bg-[hsl(210,80%,70%)]/10 flex items-center justify-center flex-shrink-0">
                     <Scale className="h-6 w-6 text-[hsl(210,80%,70%)]" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        )}
+
+        {/* Latest fuel entry */}
+        {latestFuelEntry && (
+          <Link href="/fuel">
+            <Card className="glass hover-lift overflow-hidden h-full">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0">
+                    <p className="text-sm text-muted-foreground truncate">Letzter Tankvorgang</p>
+                    <p className="text-xl font-bold mt-1 truncate">
+                      {latestFuelEntry.quantity.toFixed(1)} {latestFuelEntry.vehicle.type === 'electric' ? 'kWh' : 'L'}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1 truncate">
+                      {latestFuelEntry.vehicle.name} · {formatCurrency(latestFuelEntry.totalCents)}
+                    </p>
+                  </div>
+                  <div className="w-12 h-12 rounded-xl bg-[hsl(172,66%,65%)]/10 flex items-center justify-center flex-shrink-0">
+                    <Droplets className="h-6 w-6 text-[hsl(172,66%,65%)]" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        )}
+
+        {/* Debts */}
+        {debtsCents > 0 && (
+          <Link href="/debts">
+            <Card className="glass hover-lift overflow-hidden h-full">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="min-w-0">
+                    <p className="text-sm text-muted-foreground truncate">Schuldenstand</p>
+                    <p className="text-xl font-bold mt-1 truncate">{formatCurrency(debtsCents)}</p>
+                    <p className="text-xs text-muted-foreground mt-1 truncate">Offene Verbindlichkeiten</p>
+                  </div>
+                  <div className="w-12 h-12 rounded-xl bg-[hsl(330,80%,75%)]/10 flex items-center justify-center flex-shrink-0">
+                    <TrendingDown className="h-6 w-6 text-[hsl(330,80%,75%)]" />
                   </div>
                 </div>
               </CardContent>

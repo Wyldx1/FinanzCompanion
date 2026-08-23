@@ -1,16 +1,19 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { db } from '@/lib/db';
-import { accounts, snapshots, transactions } from '@finanz/db/schema';
+import { accounts, snapshots, transactions, debts } from '@finanz/db/schema';
 import { eq, and, isNull, desc, gte, lt, inArray, sql } from 'drizzle-orm';
 import { formatCurrency, formatPeriod } from '@/lib/utils';
-import { Plus, CreditCard, TrendingDown, Wallet, Pencil, Receipt } from 'lucide-react';
+import { Plus, CreditCard, TrendingDown, Pencil, Receipt, ArrowDownLeft } from 'lucide-react';
 import Link from 'next/link';
 
 export default async function DebtsPage() {
   const liabilityAccounts = await db.query.accounts.findMany({
     where: and(eq(accounts.kind, 'liability'), isNull(accounts.archivedAt)),
     orderBy: [accounts.sortOrder],
+    with: {
+      debt: true,
+    },
   });
 
   // Latest completed snapshot balances for liability accounts
@@ -69,10 +72,21 @@ export default async function DebtsPage() {
     // Einnahme auf liability = neue Schuld (+)
     // Ausgabe auf liability = Tilgung (-)
     const currentBalance = snapshotBalance + impact.income - impact.expense;
+    const debt = account.debt;
+    const originalCents = debt?.originalCents ?? null;
+
+    // Realer Tilgungsfortschritt anhand der ursprünglichen Schuld
+    let realProgress = 0;
+    if (originalCents && originalCents > 0 && currentBalance > 0) {
+      realProgress = Math.max(0, Math.min(1, (originalCents - currentBalance) / originalCents));
+    }
+
     return {
       ...account,
       currentBalance,
       snapshotBalance,
+      debt,
+      realProgress,
     };
   });
 
@@ -160,8 +174,9 @@ export default async function DebtsPage() {
           ) : (
             <div className="space-y-4">
               {enrichedAccounts.map((account, index) => {
-                const progress = account.currentBalance > 0 && account.snapshotBalance > 0
-                  ? Math.max(0, Math.min(100, ((account.snapshotBalance - account.currentBalance) / account.snapshotBalance) * 100))
+                const progressBasis = account.debt?.originalCents ?? account.snapshotBalance;
+                const progress = progressBasis > 0 && account.currentBalance > 0
+                  ? Math.max(0, Math.min(100, ((progressBasis - account.currentBalance) / progressBasis) * 100))
                   : 0;
 
                 return (
@@ -193,21 +208,62 @@ export default async function DebtsPage() {
                               />
                             </div>
                             <div className="flex justify-between text-xs text-muted-foreground">
-                              <span>{formatCurrency(account.snapshotBalance)} bei letztem Abschluss</span>
+                              <span>
+                                {account.debt?.originalCents
+                                  ? `${formatCurrency(account.debt.originalCents)} ursprünglich`
+                                  : `${formatCurrency(account.snapshotBalance)} bei letztem Abschluss`}
+                              </span>
                               <span>{Math.round(progress)}% getilgt</span>
                             </div>
                           </div>
+
+                          {/* Debt details */}
+                          {account.debt ? (
+                            <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                              <div className="p-2 rounded-lg bg-secondary/70">
+                                <span className="text-muted-foreground block">Original</span>
+                                <span className="font-medium">{formatCurrency(account.debt.originalCents)}</span>
+                              </div>
+                              {account.debt.interestRateBps > 0 && (
+                                <div className="p-2 rounded-lg bg-secondary/70">
+                                  <span className="text-muted-foreground block">Zinssatz</span>
+                                  <span className="font-medium">{(account.debt.interestRateBps / 100).toFixed(2)}%</span>
+                                </div>
+                              )}
+                              {account.debt.minimumPaymentCents > 0 && (
+                                <div className="p-2 rounded-lg bg-secondary/70">
+                                  <span className="text-muted-foreground block">Mindesttilgung</span>
+                                  <span className="font-medium">{formatCurrency(account.debt.minimumPaymentCents)}</span>
+                                </div>
+                              )}
+                              {account.debt.dueDay && (
+                                <div className="p-2 rounded-lg bg-secondary/70">
+                                  <span className="text-muted-foreground block">Fälligkeit</span>
+                                  <span className="font-medium">{account.debt.dueDay}. im Monat</span>
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <p className="mt-3 text-xs text-muted-foreground">
+                              Keine Schulden-Details hinterlegt. Nur Kontostand wird angezeigt.
+                            </p>
+                          )}
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1 flex-shrink-0">
+                      <div className="flex flex-col items-center gap-1 flex-shrink-0">
+                        <Link href={`/transactions/new?accountId=${account.id}&direction=expense&note=Schuldentilgung`}>
+                          <Button variant="ghost" size="icon" className="hover:bg-primary/20 hover:text-primary" title="Tilgung buchen">
+                            <ArrowDownLeft className="h-4 w-4" />
+                          </Button>
+                        </Link>
                         <Link href={`/transactions?account=${account.id}`}>
-                          <Button variant="ghost" size="icon" className="hover:bg-primary/20 hover:text-primary">
+                          <Button variant="ghost" size="icon" className="hover:bg-primary/20 hover:text-primary" title="Buchungen anzeigen">
                             <Receipt className="h-4 w-4" />
                           </Button>
                         </Link>
                         <Link href={`/accounts/${account.id}/edit`}>
-                          <Button variant="ghost" size="icon" className="hover:bg-primary/20 hover:text-primary">
+                          <Button variant="ghost" size="icon" className="hover:bg-primary/20 hover:text-primary" title="Bearbeiten">
                             <Pencil className="h-4 w-4" />
                           </Button>
                         </Link>

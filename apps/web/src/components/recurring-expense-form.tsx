@@ -256,8 +256,7 @@ export function RecurringExpenseForm({
                 Start
               </label>
               <Input
-                type="text"
-                placeholder="YYYY-MM"
+                type="month"
                 value={startPeriod}
                 onChange={(e) => setStartPeriod(e.target.value)}
                 className="h-12"
@@ -267,8 +266,7 @@ export function RecurringExpenseForm({
             <div className="space-y-3">
               <label className="text-sm font-medium text-muted-foreground">Ende (optional)</label>
               <Input
-                type="text"
-                placeholder="YYYY-MM"
+                type="month"
                 value={endPeriod}
                 onChange={(e) => setEndPeriod(e.target.value)}
                 className="h-12"

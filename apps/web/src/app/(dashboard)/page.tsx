@@ -46,13 +46,13 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-3xl md:text-4xl font-bold gradient-text">Dashboard</h1>
           <p className="text-muted-foreground mt-1">{formatPeriod(currentPeriod)}</p>
         </div>
-        <Link href="/snapshot/new">
-          <Button className="glow hover-lift">
+        <Link href="/snapshot/new" className="self-start sm:self-auto">
+          <Button className="glow hover-lift whitespace-nowrap">
             <Plus className="mr-2 h-4 w-4" />
             Monatsabschluss
           </Button>
@@ -125,6 +125,7 @@ export default async function DashboardPage() {
             workTimeEntries={allWorkTimeEntries}
             weightEntries={allWeightEntries}
             recurringExpenses={allRecurringExpenses}
+            debtsCents={metrics.debtsCents}
           />
 
           {/* Projected Current State */}

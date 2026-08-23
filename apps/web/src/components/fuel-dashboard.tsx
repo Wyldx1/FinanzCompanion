@@ -97,7 +97,7 @@ export function FuelDashboard({ entries, repairs, vehicles }: FuelDashboardProps
               Tanken
             </Button>
           </Link>
-          <Link href={`/repairs/new?vehicle=${activeVehicle}`}>
+          <Link href={`/fuel/new-repair?vehicle=${activeVehicle}`}>
             <Button variant="outline">
               <Plus className="mr-2 h-4 w-4" />
               Reparatur
@@ -128,7 +128,7 @@ export function FuelDashboard({ entries, repairs, vehicles }: FuelDashboardProps
               vehicle={vehicle}
             />
 
-            <div className="grid gap-6 lg:grid-cols-2">
+            <div className="space-y-6">
               <Card className="glass overflow-hidden">
                 <CardHeader>
                   <CardTitle className="flex items-center gap-2">
@@ -137,7 +137,7 @@ export function FuelDashboard({ entries, repairs, vehicles }: FuelDashboardProps
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <FuelList entries={filteredEntries} vehicle={vehicle} />
+                  <FuelList entries={filteredEntries} vehicle={vehicle} vehicles={vehicles} />
                 </CardContent>
               </Card>
 

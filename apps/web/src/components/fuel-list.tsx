@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { FeedbackToast, useFeedback } from '@/components/feedback-toast';
 import { Pencil, Trash2, Fuel, Zap } from 'lucide-react';
-import { formatCurrency } from '@/lib/utils';
+import { cn, formatCurrency } from '@/lib/utils';
 import Link from 'next/link';
 
 interface Vehicle {
@@ -37,12 +37,23 @@ interface FuelEntry {
 interface FuelListProps {
   entries: FuelEntry[];
   vehicle: Vehicle;
+  vehicles?: Vehicle[];
 }
 
-export function FuelList({ entries, vehicle }: FuelListProps) {
+export function FuelList({ entries, vehicle, vehicles }: FuelListProps) {
   const router = useRouter();
+  const [selectedVehicleId, setSelectedVehicleId] = useState<number>(vehicle.id);
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const { feedback, showFeedback } = useFeedback();
+
+  useEffect(() => {
+    setSelectedVehicleId(vehicle.id);
+  }, [vehicle.id]);
+
+  const filteredEntries = vehicles
+    ? entries.filter((e) => e.vehicleId === selectedVehicleId)
+    : entries;
+  const selectedVehicle = vehicles?.find((v) => v.id === selectedVehicleId) || vehicle;
 
   async function handleDelete(id: number) {
     setDeleteId(null);
@@ -60,7 +71,7 @@ export function FuelList({ entries, vehicle }: FuelListProps) {
     router.refresh();
   }
 
-  if (entries.length === 0) {
+  if (filteredEntries.length === 0) {
     return (
       <div className="text-center py-10">
         <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
@@ -68,18 +79,41 @@ export function FuelList({ entries, vehicle }: FuelListProps) {
         </div>
         <p className="text-foreground mb-1">Keine Tankvorgänge</p>
         <p className="text-muted-foreground text-sm">
-          Erfasse deinen ersten {vehicle.type === 'electric' ? 'Ladevorgang' : 'Tankvorgang'}.
+          Erfasse deinen ersten {selectedVehicle.type === 'electric' ? 'Ladevorgang' : 'Tankvorgang'}.
         </p>
       </div>
     );
   }
 
-  const isElectric = vehicle.type === 'electric';
+  const isElectric = selectedVehicle.type === 'electric';
   const unitLabel = isElectric ? 'kWh' : 'L';
 
   return (
     <div className="space-y-2">
-      {entries.map((entry, index) => {
+      {vehicles && vehicles.length > 1 && (
+        <div className="flex flex-wrap gap-2 pb-2">
+          {vehicles.map((v) => {
+            const Icon = v.type === 'electric' ? Zap : Fuel;
+            return (
+              <button
+                key={v.id}
+                type="button"
+                onClick={() => setSelectedVehicleId(v.id)}
+                className={cn(
+                  'px-3 py-1.5 rounded-lg border text-sm font-medium transition-all flex items-center gap-1.5',
+                  selectedVehicleId === v.id
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-border hover:border-primary/50'
+                )}
+              >
+                <Icon className="h-3.5 w-3.5" />
+                {v.name}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {filteredEntries.map((entry, index) => {
         const date = new Date(entry.date).toLocaleDateString('de-DE', {
           weekday: 'short',
           day: 'numeric',

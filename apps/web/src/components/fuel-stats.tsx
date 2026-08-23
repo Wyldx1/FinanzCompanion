@@ -1,7 +1,7 @@
 'use client';
 
 import { Card, CardContent } from '@/components/ui/card';
-import { TrendingUp, Euro, Droplets, Wrench, Calendar } from 'lucide-react';
+import { TrendingUp, Euro, Droplets, Calendar } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 
 interface Vehicle {
@@ -40,25 +40,23 @@ interface FuelStatsProps {
 }
 
 export function FuelStats({ entries, repairs, vehicle }: FuelStatsProps) {
-  const unitLabel = vehicle.type === 'electric' ? 'kWh' : 'L';
-
   const totalFuelCost = entries.reduce((sum, e) => sum + e.totalCents, 0);
   const totalRepairCost = repairs.reduce((sum, r) => sum + r.costCents, 0);
   const totalCost = totalFuelCost + totalRepairCost;
   const totalQuantity = entries.reduce((sum, e) => sum + e.quantity, 0);
-  const avgPrice = totalQuantity > 0 ? totalFuelCost / totalQuantity : 0;
 
-  // Average cost per month (fuel only, based on first/last entry)
-  let avgCostPerMonth = 0;
-  if (entries.length > 0) {
-    const sorted = [...entries].sort(
-      (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-    );
-    const first = new Date(sorted[0].date);
-    const last = new Date(sorted[sorted.length - 1].date);
-    const months = Math.max(1, (last.getFullYear() - first.getFullYear()) * 12 + last.getMonth() - first.getMonth() + 1);
-    avgCostPerMonth = totalFuelCost / months;
+  // Average cost per month based on distinct months with fuel entries or repairs
+  const monthsWithEntriesSet = new Set<string>();
+  for (const e of entries) {
+    const d = new Date(e.date);
+    monthsWithEntriesSet.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
   }
+  for (const r of repairs) {
+    const d = new Date(r.date);
+    monthsWithEntriesSet.add(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  }
+  const monthsWithEntries = monthsWithEntriesSet.size;
+  const avgCostPerMonth = monthsWithEntries > 0 ? totalCost / monthsWithEntries : 0;
 
   // Consumption for fuel vehicles
   let avgConsumption: number | null = null;
@@ -78,7 +76,14 @@ export function FuelStats({ entries, repairs, vehicle }: FuelStatsProps) {
     avgConsumption = totalDistance > 0 ? (totalFuelQuantity / totalDistance) * 100 : null;
   }
 
-  const stats = [
+  const stats: {
+    label: string;
+    value: string;
+    sub: string;
+    icon: typeof Euro;
+    color: string;
+    bg: string;
+  }[] = [
     {
       label: 'Gesamtkosten',
       value: formatCurrency(totalCost),
@@ -90,22 +95,24 @@ export function FuelStats({ entries, repairs, vehicle }: FuelStatsProps) {
     {
       label: `Ø Kosten/Monat`,
       value: formatCurrency(Math.round(avgCostPerMonth)),
-      sub: 'Nur Tankkosten',
+      sub: monthsWithEntries > 0 ? `${monthsWithEntries} Monat(e) mit Einträgen` : 'Keine Einträge',
       icon: Calendar,
       color: 'text-[hsl(45,90%,70%)]',
       bg: 'bg-[hsl(45,90%,70%)]/10',
     },
-    {
-      label: `Ø Preis/${unitLabel}`,
-      value: avgPrice > 0 ? `${(avgPrice / 100).toFixed(3)} €` : '-',
-      sub: vehicle.type === 'fuel' ? 'Durchschnittspreis' : 'Durchschnittspreis',
-      icon: Droplets,
-      color: 'text-[hsl(210,80%,70%)]',
-      bg: 'bg-[hsl(210,80%,70%)]/10',
-    },
   ];
 
   if (vehicle.type === 'fuel') {
+    const avgPrice = totalQuantity > 0 ? totalFuelCost / totalQuantity : 0;
+    stats.push({
+      label: 'Ø Preis/Liter',
+      value: avgPrice > 0 ? `${(avgPrice / 100).toFixed(3)} €` : '-',
+      sub: 'Durchschnittspreis',
+      icon: Droplets,
+      color: 'text-[hsl(210,80%,70%)]',
+      bg: 'bg-[hsl(210,80%,70%)]/10',
+    });
+
     stats.push({
       label: 'Ø Verbrauch',
       value: avgConsumption !== null ? `${avgConsumption.toFixed(1)} L/100km` : '-',

@@ -37,6 +37,11 @@ interface TransactionFormProps {
     note: string | null;
   };
   isEdit?: boolean;
+  defaultValues?: {
+    direction?: 'expense' | 'income' | 'transfer';
+    accountId?: number | null;
+    note?: string | null;
+  };
 }
 
 const directions = [
@@ -45,9 +50,11 @@ const directions = [
   { value: 'transfer', label: 'Umbuchung', icon: ArrowLeftRight, color: 'text-[hsl(210,80%,70%)]', bg: 'bg-[hsl(210,80%,70%)]/10', border: 'border-[hsl(210,80%,70%)]' },
 ];
 
-export function TransactionForm({ categories, accounts, initialData, isEdit = false }: TransactionFormProps) {
+export function TransactionForm({ categories, accounts, initialData, isEdit = false, defaultValues }: TransactionFormProps) {
   const router = useRouter();
-  const [direction, setDirection] = useState<'expense' | 'income' | 'transfer'>(initialData?.direction || 'expense');
+  const [direction, setDirection] = useState<'expense' | 'income' | 'transfer'>(
+    initialData?.direction || defaultValues?.direction || 'expense'
+  );
   const [amount, setAmount] = useState(
     initialData?.amountCents ? (initialData.amountCents / 100).toFixed(2).replace('.', ',') : ''
   );
@@ -57,10 +64,12 @@ export function TransactionForm({ categories, accounts, initialData, isEdit = fa
       : new Date().toISOString().split('T')[0]
   );
   const [categoryId, setCategoryId] = useState<number | null>(initialData?.categoryId || null);
-  const [accountId, setAccountId] = useState<number | null>(initialData?.accountId || accounts.find(a => a)?.id || null);
+  const [accountId, setAccountId] = useState<number | null>(
+    initialData?.accountId ?? defaultValues?.accountId ?? accounts.find(a => a)?.id ?? null
+  );
   const [targetAccountId, setTargetAccountId] = useState<number | null>(initialData?.targetAccountId || null);
   const [merchant, setMerchant] = useState(initialData?.merchant || '');
-  const [note, setNote] = useState(initialData?.note || '');
+  const [note, setNote] = useState(initialData?.note || defaultValues?.note || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 

@@ -849,7 +849,7 @@ export async function handleCallback(ctx: BotContext) {
 
     if (prefix === 'worktime') {
       if (choice === 'today') {
-        ctx.session.workTime = { ...ctx.session.workTime, date: today };
+        ctx.session.workTime = { ...ctx.session.workTime, date: today, startTime: '07:30' };
         ctx.session.step = 'worktime_start';
         await ctx.editMessageText(
           `✓ Datum: ${today}\n\n🦺 Baustellenbericht\n\nStartzeit? (Vorschlag 07:30, sende nur eine andere Uhrzeit, z.B. 08:00)`
@@ -867,7 +867,7 @@ export async function handleCallback(ctx: BotContext) {
         ctx.session.step = 'tx_account';
         const buttons = await buildTxAccountButtons();
         if (buttons.length === 0) {
-          await ctx.editMessageText('❌ Kein passendes Konto gefunden. Lege zuerst ein Bargeld- oder Girokonto an.');
+          await ctx.editMessageText('❌ Keine Konten vorhanden. Lege zuerst ein Konto in der Web-App an.');
           ctx.session = {};
           return;
         }
@@ -885,20 +885,9 @@ export async function handleCallback(ctx: BotContext) {
     if (prefix === 'income') {
       if (choice === 'today') {
         ctx.session.income = { ...ctx.session.income, date: today };
-        ctx.session.step = 'income_type';
-        const types = [
-          { label: '💼 Gehalt', value: 'Gehalt' },
-          { label: '👶 Kindergeld', value: 'Kindergeld' },
-          { label: '⏰ Überstunden', value: 'Überstunden' },
-          { label: '📦 Sonstiges', value: 'Sonstiges' },
-        ];
+        ctx.session.step = 'income_note';
         await ctx.editMessageText(
-          `✓ Datum: ${today}\n\nTyp?`,
-          {
-            reply_markup: {
-              inline_keyboard: [types.map((t) => ({ text: t.label, callback_data: `income_type:${t.value}` }))],
-            },
-          }
+          `✓ Datum: ${today}\n\n📝 Notiz? (oder "-")`
         );
       } else {
         ctx.session.step = 'income_date_input';
@@ -939,10 +928,21 @@ export async function handleCallback(ctx: BotContext) {
     const type = data.split(':')[1];
 
     ctx.session.income = { ...ctx.session.income, type };
-    ctx.session.step = 'income_note';
+    ctx.session.step = 'income_date_choice';
 
+    const today = new Date().toISOString().split('T')[0];
     await ctx.editMessageText(
-      `✓ Typ: ${type}\n\n📝 Notiz? (oder "-")`
+      `✓ Typ: ${type}\n\n📅 Datum?`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: `📅 Heute (${today})`, callback_data: 'date_choice:today:income' },
+              { text: '📆 Anderes Datum', callback_data: 'date_choice:custom:income' },
+            ],
+          ],
+        },
+      }
     );
     return;
   }
@@ -999,7 +999,7 @@ async function handleWorkTimeDateInput(ctx: BotContext, text: string) {
     return;
   }
 
-  ctx.session.workTime = { ...ctx.session.workTime, date };
+  ctx.session.workTime = { ...ctx.session.workTime, date, startTime: '07:30' };
   ctx.session.step = 'worktime_start';
 
   await ctx.reply(
@@ -1021,7 +1021,7 @@ async function handleTxDateInput(ctx: BotContext, text: string) {
 
   const buttons = await buildTxAccountButtons();
   if (buttons.length === 0) {
-    await ctx.reply('❌ Kein passendes Konto gefunden. Lege zuerst ein Bargeld- oder Girokonto an.');
+    await ctx.reply('❌ Keine Konten vorhanden. Lege zuerst ein Konto in der Web-App an.');
     ctx.session = {};
     return;
   }
@@ -1070,8 +1070,23 @@ async function handleFuelQuantity(ctx: BotContext, text: string) {
   await ctx.reply(`✓ Menge: ${quantity.toFixed(2)} ${unit}\n\n💶 Preis pro ${unit}? (z.B. 2,999)`);
 }
 
+function parseFuelPriceCents(value: string): number | null {
+  let cleaned = value.trim().toLowerCase().replace(/\s/g, '').replace('€', '');
+  if (!cleaned) return null;
+
+  if (cleaned.includes(',') && cleaned.includes('.')) {
+    cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+  } else if (cleaned.includes(',')) {
+    cleaned = cleaned.replace(',', '.');
+  }
+
+  const num = parseFloat(cleaned);
+  if (isNaN(num) || num < 0) return null;
+  return num * 100; // Cent-Float für 3-Dezimal-Preise, z. B. 2,999 -> 299.9
+}
+
 async function handleFuelPrice(ctx: BotContext, text: string) {
-  const priceCents = parseCurrencyFuel(text);
+  const priceCents = parseFuelPriceCents(text);
   if (priceCents === null || priceCents < 0) {
     await ctx.reply('❌ Bitte einen gültigen Preis eingeben, z.B. 2,999');
     return;
@@ -1164,7 +1179,7 @@ async function handleWeightValue(ctx: BotContext, text: string) {
   ctx.session.weight = { ...ctx.session.weight, weightKg };
   ctx.session.step = 'weight_notes';
 
-  await ctx.reply(`✓ Gewicht: ${weightKg.toFixed(1)} kg\n\n📝 Notiz? (oder "-")`);
+  await ctx.reply(`✓ Gewicht: ${weightKg.toFixed(1)} kg\n\n📝 Optional: Notiz? (oder "-")`);
 }
 
 async function handleWeightNotes(ctx: BotContext, text: string) {
@@ -1216,9 +1231,13 @@ async function buildTxAccountButtons(): Promise<{ text: string; callback_data: s
   const cashAccount = await db.query.accounts.findFirst({
     where: and(eq(accounts.kind, 'cash'), isNull(accounts.archivedAt)),
   });
-  const cardAccount = await db.query.accounts.findFirst({
-    where: and(eq(accounts.kind, 'checking'), isNull(accounts.archivedAt)),
-  });
+  const cardAccount =
+    (await db.query.accounts.findFirst({
+      where: and(eq(accounts.isDefaultPayment, true), isNull(accounts.archivedAt)),
+    })) ||
+    (await db.query.accounts.findFirst({
+      where: and(eq(accounts.kind, 'checking'), isNull(accounts.archivedAt)),
+    }));
 
   const buttons: { text: string; callback_data: string }[] = [];
   if (cashAccount) {
@@ -1226,6 +1245,17 @@ async function buildTxAccountButtons(): Promise<{ text: string; callback_data: s
   }
   if (cardAccount) {
     buttons.push({ text: `💳 Karte (${cardAccount.name})`, callback_data: `tx_account:${cardAccount.id}` });
+  }
+
+  // Falls weder Bar- noch Karten-Konto existieren, alle aktiven Konten zur Auswahl anbieten
+  if (buttons.length === 0) {
+    const allAccounts = await db.query.accounts.findMany({
+      where: isNull(accounts.archivedAt),
+      orderBy: [accounts.sortOrder],
+    });
+    for (const account of allAccounts) {
+      buttons.push({ text: `${account.icon || '💳'} ${account.name}`, callback_data: `tx_account:${account.id}` });
+    }
   }
 
   return buttons;
@@ -1331,22 +1361,10 @@ async function handleIncomeDateInput(ctx: BotContext, text: string) {
   }
 
   ctx.session.income = { ...ctx.session.income, date };
-  ctx.session.step = 'income_type';
-
-  const types = [
-    { label: '💼 Gehalt', value: 'Gehalt' },
-    { label: '👶 Kindergeld', value: 'Kindergeld' },
-    { label: '⏰ Überstunden', value: 'Überstunden' },
-    { label: '📦 Sonstiges', value: 'Sonstiges' },
-  ];
+  ctx.session.step = 'income_note';
 
   await ctx.reply(
-    `✓ Datum: ${date}\n\nTyp?`,
-    {
-      reply_markup: {
-        inline_keyboard: [types.map((t) => ({ text: t.label, callback_data: `income_type:${t.value}` }))],
-      },
-    }
+    `✓ Datum: ${date}\n\n📝 Notiz? (oder "-")`
   );
 }
 
@@ -1358,19 +1376,20 @@ async function handleIncomeAmount(ctx: BotContext, text: string) {
   }
 
   ctx.session.income = { ...ctx.session.income, amountCents };
-  ctx.session.step = 'income_date_choice';
+  ctx.session.step = 'income_type';
 
-  const today = new Date().toISOString().split('T')[0];
+  const types = [
+    { label: '💼 Gehalt', value: 'Gehalt' },
+    { label: '👶 Kindergeld', value: 'Kindergeld' },
+    { label: '⏰ Überstunden', value: 'Überstunden' },
+    { label: '📦 Sonstiges', value: 'Sonstiges' },
+  ];
+
   await ctx.reply(
-    `✓ Betrag: ${formatCurrency(amountCents)}\n\n📅 Datum?`,
+    `✓ Betrag: ${formatCurrency(amountCents)}\n\nEinkommensart?`,
     {
       reply_markup: {
-        inline_keyboard: [
-          [
-            { text: `📅 Heute (${today})`, callback_data: 'date_choice:today:income' },
-            { text: '📆 Anderes Datum', callback_data: 'date_choice:custom:income' },
-          ],
-        ],
+        inline_keyboard: [types.map((t) => ({ text: t.label, callback_data: `income_type:${t.value}` }))],
       },
     }
   );

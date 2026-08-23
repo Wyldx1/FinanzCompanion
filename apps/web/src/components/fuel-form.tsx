@@ -33,7 +33,7 @@ interface FuelFormProps {
   defaultVehicleId?: number;
 }
 
-function parsePriceToCents(value: string): number | null {
+function parsePricePerUnit(value: string): number | null {
   let cleaned = value.trim().toLowerCase().replace(/\s/g, '').replace('€', '');
   if (!cleaned) return null;
 
@@ -45,7 +45,7 @@ function parsePriceToCents(value: string): number | null {
 
   const num = parseFloat(cleaned);
   if (isNaN(num) || num < 0) return null;
-  return Math.round(num * 100);
+  return num * 100; // Cent-Float, z. B. 2,999 €/L -> 299.9
 }
 
 function formatPrice(value: number): string {
@@ -96,7 +96,7 @@ export function FuelForm({ vehicles, previousEntries = [], initialData, isEdit =
 
   const calculatedTotal = useMemo(() => {
     const qty = parseFloat(quantity || '0');
-    const price = parsePriceToCents(pricePerUnit);
+    const price = parsePricePerUnit(pricePerUnit);
     if (!qty || price === null) return null;
     return Math.round(qty * price);
   }, [quantity, pricePerUnit]);
@@ -104,7 +104,7 @@ export function FuelForm({ vehicles, previousEntries = [], initialData, isEdit =
   function handlePriceChange(value: string) {
     setPricePerUnit(value);
     const qty = parseFloat(quantity || '0');
-    const price = parsePriceToCents(value);
+    const price = parsePricePerUnit(value);
     if (qty && price !== null) {
       setTotal((Math.round(qty * price) / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
     }
@@ -113,7 +113,7 @@ export function FuelForm({ vehicles, previousEntries = [], initialData, isEdit =
   function handleQuantityChange(value: string) {
     setQuantity(value);
     const qty = parseFloat(value || '0');
-    const price = parsePriceToCents(pricePerUnit);
+    const price = parsePricePerUnit(pricePerUnit);
     if (qty && price !== null) {
       setTotal((Math.round(qty * price) / 100).toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
     }
@@ -121,10 +121,10 @@ export function FuelForm({ vehicles, previousEntries = [], initialData, isEdit =
 
   function handleTotalChange(value: string) {
     setTotal(value);
-    const totalCents = parsePriceToCents(value);
+    const totalCents = parsePricePerUnit(value);
     const qty = parseFloat(quantity || '0');
     if (qty && totalCents !== null) {
-      setPricePerUnit(formatPrice(Math.round(totalCents / qty)));
+      setPricePerUnit(formatPrice(totalCents / qty));
     }
   }
 
@@ -135,7 +135,7 @@ export function FuelForm({ vehicles, previousEntries = [], initialData, isEdit =
 
     const odo = parseInt(odometerKm);
     const qty = parseFloat(quantity);
-    const priceCents = parsePriceToCents(pricePerUnit);
+    const priceCents = parsePricePerUnit(pricePerUnit);
 
     if (!vehicleId) {
       setError('Bitte ein Fahrzeug auswählen');
