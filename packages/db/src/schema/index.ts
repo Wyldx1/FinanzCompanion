@@ -34,7 +34,7 @@ export const snapshotStatusEnum = pgEnum('snapshot_status', ['draft', 'complete'
 
 export const txDirectionEnum = pgEnum('tx_direction', ['expense', 'income', 'transfer']);
 
-export const txSourceEnum = pgEnum('tx_source', ['telegram', 'web', 'csv_import', 'psd2']);
+export const txSourceEnum = pgEnum('tx_source', ['telegram', 'web', 'csv_import', 'psd2', 'recurring']);
 
 export const goalKindEnum = pgEnum('goal_kind', [
   'emergency_fund',
@@ -187,6 +187,35 @@ export const quickActionsRelations = relations(quickActions, ({ one }) => ({
 }));
 
 // =====================================================
+// WIEDERKEHRENDE AUSGABEN
+// =====================================================
+
+export const recurringExpenses = pgTable('recurring_expenses', {
+  id: serial('id').primaryKey(),
+  name: text('name').notNull(),
+  amountCents: bigint('amount_cents', { mode: 'number' }).notNull(),
+  direction: txDirectionEnum('direction').notNull().default('expense'),
+  categoryId: integer('category_id').references(() => categories.id),
+  accountId: integer('account_id').references(() => accounts.id),
+  startPeriod: char('start_period', { length: 7 }).notNull(), // 'YYYY-MM'
+  endPeriod: char('end_period', { length: 7 }), // optional
+  dayOfMonth: smallint('day_of_month').notNull().default(1),
+  active: boolean('active').notNull().default(true),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const recurringExpensesRelations = relations(recurringExpenses, ({ one }) => ({
+  category: one(categories, {
+    fields: [recurringExpenses.categoryId],
+    references: [categories.id],
+  }),
+  account: one(accounts, {
+    fields: [recurringExpenses.accountId],
+    references: [accounts.id],
+  }),
+}));
+
+// =====================================================
 // TRANSAKTIONEN
 // =====================================================
 
@@ -200,6 +229,7 @@ export const transactions = pgTable(
     categoryId: integer('category_id').references(() => categories.id),
     accountId: integer('account_id').references(() => accounts.id),
     targetAccountId: integer('target_account_id').references(() => accounts.id),
+    recurringExpenseId: integer('recurring_expense_id').references(() => recurringExpenses.id),
     merchant: text('merchant'),
     note: text('note'),
     source: txSourceEnum('source').notNull(),
@@ -228,6 +258,10 @@ export const transactionsRelations = relations(transactions, ({ one }) => ({
   targetAccount: one(accounts, {
     fields: [transactions.targetAccountId],
     references: [accounts.id],
+  }),
+  recurringExpense: one(recurringExpenses, {
+    fields: [transactions.recurringExpenseId],
+    references: [recurringExpenses.id],
   }),
 }));
 

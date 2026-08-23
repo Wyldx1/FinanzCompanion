@@ -29,12 +29,13 @@ interface AccountFormProps {
     notes: string | null;
   };
   isEdit?: boolean;
+  defaultKind?: string;
 }
 
-export function AccountForm({ initialData, isEdit = false }: AccountFormProps) {
+export function AccountForm({ initialData, isEdit = false, defaultKind }: AccountFormProps) {
   const router = useRouter();
   const [name, setName] = useState(initialData?.name || '');
-  const [kind, setKind] = useState(initialData?.kind || 'checking');
+  const [kind, setKind] = useState(initialData?.kind || defaultKind || 'checking');
   const [institution, setInstitution] = useState(initialData?.institution || '');
   const [includeInNetworth, setIncludeInNetworth] = useState(initialData?.includeInNetworth ?? true);
   const [isDefaultPayment, setIsDefaultPayment] = useState(initialData?.isDefaultPayment ?? false);

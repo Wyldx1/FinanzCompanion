@@ -2,21 +2,35 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { db } from '@/lib/db';
 import { transactions, categories, accounts } from '@finanz/db/schema';
-import { desc, isNull, and, gte, asc } from 'drizzle-orm';
+import { desc, isNull, and, gte, eq } from 'drizzle-orm';
 import { formatCurrency, getCurrentPeriod } from '@/lib/utils';
-import { Plus, Receipt, TrendingDown, TrendingUp } from 'lucide-react';
+import { Plus, Receipt, TrendingDown, TrendingUp, X } from 'lucide-react';
 import Link from 'next/link';
 import { TransactionList } from '@/components/transaction-list';
 
-export default async function TransactionsPage() {
+interface TransactionsPageProps {
+  searchParams: { account?: string };
+}
+
+export default async function TransactionsPage({ searchParams }: TransactionsPageProps) {
   const currentPeriod = getCurrentPeriod();
   const monthStart = new Date(currentPeriod + '-01');
+  const accountFilter = searchParams.account ? parseInt(searchParams.account) : null;
+
+  const whereClause = accountFilter
+    ? and(eq(transactions.accountId, accountFilter))
+    : undefined;
 
   const allTransactions = await db.query.transactions.findMany({
+    where: whereClause,
     with: { category: true, account: true, targetAccount: true },
     orderBy: [desc(transactions.occurredOn), desc(transactions.createdAt)],
-    limit: 100,
+    limit: 200,
   });
+
+  const filteredAccount = accountFilter
+    ? await db.query.accounts.findFirst({ where: eq(accounts.id, accountFilter) })
+    : null;
 
   // Calculate monthly totals
   const monthlyTransactions = allTransactions.filter(
@@ -38,7 +52,9 @@ export default async function TransactionsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl md:text-4xl font-bold gradient-text">Transaktionen</h1>
+          <h1 className="text-3xl md:text-4xl font-bold gradient-text">
+            {filteredAccount ? `Transaktionen: ${filteredAccount.name}` : 'Transaktionen'}
+          </h1>
           <p className="text-muted-foreground mt-1">
             {allTransactions.length} Transaktionen
             {unconfirmedCount > 0 && (
@@ -46,12 +62,22 @@ export default async function TransactionsPage() {
             )}
           </p>
         </div>
-        <Link href="/transactions/new">
-          <Button className="glow hover-lift">
-            <Plus className="mr-2 h-4 w-4" />
-            Neue Transaktion
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          {filteredAccount && (
+            <Link href="/transactions">
+              <Button variant="outline" size="sm">
+                <X className="mr-2 h-4 w-4" />
+                Filter löschen
+              </Button>
+            </Link>
+          )}
+          <Link href="/transactions/new">
+            <Button className="glow hover-lift">
+              <Plus className="mr-2 h-4 w-4" />
+              Neue Transaktion
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {/* Monthly Summary */}
@@ -94,7 +120,7 @@ export default async function TransactionsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <Receipt className="h-5 w-5 text-primary" />
-            Alle Transaktionen
+            {filteredAccount ? `Transaktionen für ${filteredAccount.name}` : 'Alle Transaktionen'}
           </CardTitle>
         </CardHeader>
         <CardContent>

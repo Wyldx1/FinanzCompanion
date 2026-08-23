@@ -4,6 +4,7 @@ import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '@finanz/db/schema';
 import { checkAndSendReminder } from './reminders.js';
+import { processRecurringExpenses } from './recurring.js';
 
 // Database connection
 const connectionString = process.env.DATABASE_URL!;
@@ -16,6 +17,20 @@ const REMINDER_HOUR = parseInt(process.env.REMINDER_HOUR || '19', 10);
 console.log('Worker starting...');
 console.log(`Timezone: ${TIMEZONE}`);
 console.log(`Reminder hour: ${REMINDER_HOUR}`);
+
+// Run recurring expenses check once on startup and then daily at 06:00
+processRecurringExpenses(db).catch((err) => {
+  console.error('[recurring] Startup check failed:', err);
+});
+
+cron.schedule(
+  '0 6 * * *',
+  async () => {
+    console.log('[recurring] Running daily check...');
+    await processRecurringExpenses(db);
+  },
+  { timezone: TIMEZONE }
+);
 
 // Reminder Stage 1: 28th at 19:00
 cron.schedule(

@@ -33,6 +33,7 @@ interface Transaction {
     id: number;
     name: string;
     icon: string | null;
+    kind: string;
   } | null;
   targetAccount: {
     id: number;
@@ -161,6 +162,11 @@ export function TransactionList({ transactions }: TransactionListProps) {
                       {tx.direction === 'transfer' && tx.targetAccount && (
                         <span className="text-xs text-muted-foreground">
                           {' '}→ {tx.targetAccount.name}
+                        </span>
+                      )}
+                      {tx.direction === 'expense' && tx.account?.kind === 'liability' && (
+                        <span className="text-xs bg-[hsl(330,80%,75%)]/20 text-[hsl(330,80%,75%)] px-2 py-0.5 rounded-full">
+                          Tilgung
                         </span>
                       )}
                       {tx.note && (

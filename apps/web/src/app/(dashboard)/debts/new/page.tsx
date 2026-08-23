@@ -1,9 +1,5 @@
-import { DebtForm } from '@/components/debt-form';
+import { redirect } from 'next/navigation';
 
 export default function NewDebtPage() {
-  return (
-    <div className="max-w-lg mx-auto">
-      <DebtForm />
-    </div>
-  );
+  redirect('/accounts/new?kind=liability');
 }
