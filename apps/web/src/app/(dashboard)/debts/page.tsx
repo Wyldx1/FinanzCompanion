@@ -42,7 +42,8 @@ export default async function DebtsPage() {
     ? await db
         .select({
           accountId: transactions.accountId,
-          total: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.direction} = 'expense' THEN ${transactions.amountCents} ELSE 0 END), 0)`,
+          income: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.direction} = 'income' THEN ${transactions.amountCents} ELSE 0 END), 0)`,
+          expense: sql<number>`COALESCE(SUM(CASE WHEN ${transactions.direction} = 'expense' THEN ${transactions.amountCents} ELSE 0 END), 0)`,
         })
         .from(transactions)
         .where(and(
@@ -52,17 +53,22 @@ export default async function DebtsPage() {
         .groupBy(transactions.accountId)
     : [];
 
-  const expenseByAccount = new Map<number, number>();
+  const impactByAccount = new Map<number, { income: number; expense: number }>();
   for (const row of txImpact) {
     if (row.accountId !== null) {
-      expenseByAccount.set(row.accountId, Number(row.total) || 0);
+      impactByAccount.set(row.accountId, {
+        income: Number(row.income) || 0,
+        expense: Number(row.expense) || 0,
+      });
     }
   }
 
   const enrichedAccounts = liabilityAccounts.map((account) => {
     const snapshotBalance = snapshotBalanceByAccount.get(account.id) ?? 0;
-    const expensesSinceSnapshot = expenseByAccount.get(account.id) ?? 0;
-    const currentBalance = snapshotBalance + expensesSinceSnapshot;
+    const impact = impactByAccount.get(account.id) ?? { income: 0, expense: 0 };
+    // Einnahme auf liability = neue Schuld (+)
+    // Ausgabe auf liability = Tilgung (-)
+    const currentBalance = snapshotBalance + impact.income - impact.expense;
     return {
       ...account,
       currentBalance,
