@@ -253,6 +253,7 @@ export function FuelForm({ vehicles, previousEntries = [], initialData, isEdit =
             <Input
               type="number"
               inputMode="numeric"
+              pattern="[0-9]*"
               min={0}
               value={odometerKm}
               onChange={(e) => setOdometerKm(e.target.value)}

@@ -281,6 +281,8 @@ export function RecurringExpenseForm({
             <label className="text-sm font-medium text-muted-foreground">Tag im Monat</label>
             <Input
               type="number"
+              inputMode="numeric"
+              pattern="[0-9]*"
               min={1}
               max={31}
               value={dayOfMonth}

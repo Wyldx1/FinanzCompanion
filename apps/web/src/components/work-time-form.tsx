@@ -166,6 +166,8 @@ export function WorkTimeForm({ initialData, isEdit = false }: WorkTimeFormProps)
             <label className="text-sm font-medium text-muted-foreground">Pause (Minuten)</label>
             <Input
               type="number"
+              inputMode="numeric"
+              pattern="[0-9]*"
               min={0}
               step={5}
               value={breakMinutes}
