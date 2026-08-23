@@ -13,8 +13,10 @@ import {
   handleUndo,
   handleBericht,
   handleTanken,
-  handleFuelCallback,
+  handleCallback,
   handleGewicht,
+  handleTransaktion,
+  handleEinkommen,
 } from './handlers.js';
 import { createServer } from 'http';
 
@@ -39,6 +41,16 @@ interface WeightSession {
   weightKg?: number;
 }
 
+interface TransactionSession {
+  amountCents?: number;
+  accountId?: number;
+}
+
+interface IncomeSession {
+  amountCents?: number;
+  type?: string;
+}
+
 // Session data interface
 interface SessionData {
   step?: string;
@@ -50,6 +62,8 @@ interface SessionData {
   workTime?: WorkTimeSession;
   fuel?: FuelSession;
   weight?: WeightSession;
+  tx?: TransactionSession;
+  income?: IncomeSession;
 }
 
 type BotContext = Context & SessionFlavor<SessionData>;
@@ -186,6 +200,8 @@ bot.command('start', async (ctx) => {
     '👋 Willkommen beim Finanz-Companion!\n\n' +
       'Verfügbare Befehle:\n' +
       '/stand - Monatsabschluss erfassen\n' +
+      '/transaktion - Ausgabe mit Bar/Karte-Buttons\n' +
+      '/einkommen - Einkommen erfassen\n' +
       '/tanken - Tank- oder Ladevorgang erfassen\n' +
       '/gewicht - Gewicht eintragen\n' +
       '/bericht - Arbeitszeit / Baustellenbericht\n' +
@@ -203,6 +219,8 @@ bot.command('hilfe', async (ctx) => {
   await ctx.reply(
     '📊 Finanz-Companion Befehle:\n\n' +
       '/stand - Monatsabschluss erfassen\n' +
+      '/transaktion - Ausgabe mit Bar/Karte-Buttons\n' +
+      '/einkommen - Einkommen erfassen\n' +
       '/tanken - Tank- oder Ladevorgang erfassen\n' +
       '/gewicht - Gewicht eintragen\n' +
       '/bericht - Arbeitszeit / Baustellenbericht\n' +
@@ -220,6 +238,8 @@ bot.command('hilfe', async (ctx) => {
 });
 
 bot.command('stand', handleStand);
+bot.command('transaktion', handleTransaktion);
+bot.command('einkommen', handleEinkommen);
 bot.command('tanken', handleTanken);
 bot.command('gewicht', handleGewicht);
 bot.command('heute', handleToday);
@@ -234,8 +254,8 @@ bot.command('abbruch', async (ctx) => {
 // Handle free text messages
 bot.on('message:text', handleText);
 
-// Handle inline keyboard callbacks (fuel vehicle selection)
-bot.on('callback_query:data', handleFuelCallback);
+// Handle inline keyboard callbacks (fuel vehicle, tx account, income type)
+bot.on('callback_query:data', handleCallback);
 
 // Error handler
 bot.catch((err) => {
@@ -251,6 +271,8 @@ function registerCommands(): void {
   bot.api
     .setMyCommands([
       { command: 'stand', description: 'Monatsabschluss erfassen' },
+      { command: 'transaktion', description: 'Ausgabe mit Bar/Karte-Buttons' },
+      { command: 'einkommen', description: 'Einkommen erfassen' },
       { command: 'tanken', description: 'Tank- oder Ladevorgang erfassen' },
       { command: 'gewicht', description: 'Gewicht eintragen' },
       { command: 'bericht', description: 'Arbeitszeit / Baustellenbericht' },

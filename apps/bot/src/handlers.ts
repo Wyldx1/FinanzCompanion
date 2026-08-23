@@ -36,6 +36,16 @@ interface WeightSession {
   weightKg?: number;
 }
 
+interface TransactionSession {
+  amountCents?: number;
+  accountId?: number;
+}
+
+interface IncomeSession {
+  amountCents?: number;
+  type?: string;
+}
+
 interface SessionData {
   step?: string;
   snapshotPeriod?: string;
@@ -46,6 +56,8 @@ interface SessionData {
   workTime?: WorkTimeSession;
   fuel?: FuelSession;
   weight?: WeightSession;
+  tx?: TransactionSession;
+  income?: IncomeSession;
 }
 
 type BotContext = Context & SessionFlavor<SessionData>;
@@ -244,6 +256,28 @@ export async function handleText(ctx: BotContext) {
 
   if (ctx.session.step === 'weight_notes') {
     await handleWeightNotes(ctx, text);
+    return;
+  }
+
+  // Transaction dialog steps
+  if (ctx.session.step === 'tx_amount') {
+    await handleTxAmount(ctx, text);
+    return;
+  }
+
+  if (ctx.session.step === 'tx_description') {
+    await handleTxDescription(ctx, text);
+    return;
+  }
+
+  // Income dialog steps
+  if (ctx.session.step === 'income_amount') {
+    await handleIncomeAmount(ctx, text);
+    return;
+  }
+
+  if (ctx.session.step === 'income_note') {
+    await handleIncomeNote(ctx, text);
     return;
   }
 
@@ -704,10 +738,11 @@ export async function handleTanken(ctx: BotContext) {
   });
 }
 
-export async function handleFuelCallback(ctx: BotContext) {
+export async function handleCallback(ctx: BotContext) {
   const data = ctx.callbackQuery?.data;
   if (!data) return;
 
+  // Fuel vehicle selection
   if (data.startsWith('fuel_vehicle:')) {
     await ctx.answerCallbackQuery();
     const vehicleId = parseInt(data.split(':')[1]);
@@ -727,6 +762,43 @@ export async function handleFuelCallback(ctx: BotContext) {
     const today = new Date().toISOString().split('T')[0];
     await ctx.editMessageText(
       `✓ Fahrzeug: ${vehicle.name}\n\n📅 Datum? (Vorschlag: ${today}, sende anderes Datum als YYYY-MM-DD oder ".")`
+    );
+    return;
+  }
+
+  // Transaction payment method
+  if (data.startsWith('tx_account:')) {
+    await ctx.answerCallbackQuery();
+    const accountId = parseInt(data.split(':')[1]);
+    const account = await db.query.accounts.findFirst({
+      where: eq(accounts.id, accountId),
+    });
+
+    if (!account) {
+      await ctx.reply('❌ Konto nicht gefunden.');
+      ctx.session = {};
+      return;
+    }
+
+    ctx.session.tx = { ...ctx.session.tx, accountId };
+    ctx.session.step = 'tx_description';
+
+    await ctx.editMessageText(
+      `✓ Zahlungsart: ${account.name}\n\n📝 Wofür? (z.B. Rewe, Tanken, Döner)`
+    );
+    return;
+  }
+
+  // Income type
+  if (data.startsWith('income_type:')) {
+    await ctx.answerCallbackQuery();
+    const type = data.split(':')[1];
+
+    ctx.session.income = { ...ctx.session.income, type };
+    ctx.session.step = 'income_note';
+
+    await ctx.editMessageText(
+      `✓ Typ: ${type}\n\n📝 Notiz? (oder "-")`
     );
     return;
   }
@@ -911,6 +983,196 @@ async function handleWeightNotes(ctx: BotContext, text: string) {
       `📅 ${new Date(created.date).toLocaleDateString('de-DE')}\n` +
       `⚖️ ${created.weightKg.toFixed(1)} kg\n` +
       (created.notes ? `📝 ${created.notes}\n` : '') +
+      '━━━━━━━━━━━━━━━━━━━━'
+  );
+}
+
+// =====================================================
+// TRANSAKTION / EINKOMMEN (geführte Dialoge)
+// =====================================================
+
+export async function handleTransaktion(ctx: BotContext) {
+  ctx.session.step = 'tx_amount';
+  ctx.session.tx = {};
+
+  await ctx.reply(
+    '💳 Transaktion erfassen\n\n' +
+      'Betrag? (z.B. 14,80)'
+  );
+}
+
+async function handleTxAmount(ctx: BotContext, text: string) {
+  const amountCents = parseCurrencyFuel(text);
+  if (amountCents === null || amountCents <= 0) {
+    await ctx.reply('❌ Bitte einen gültigen Betrag eingeben, z.B. 14,80');
+    return;
+  }
+
+  ctx.session.tx = { ...ctx.session.tx, amountCents };
+  ctx.session.step = 'tx_account';
+
+  const cashAccount = await db.query.accounts.findFirst({
+    where: and(eq(accounts.kind, 'cash'), isNull(accounts.archivedAt)),
+  });
+  const cardAccount = await db.query.accounts.findFirst({
+    where: and(eq(accounts.kind, 'checking'), isNull(accounts.archivedAt)),
+  });
+
+  const buttons: { text: string; callback_data: string }[] = [];
+  if (cashAccount) {
+    buttons.push({ text: `💶 Bar (${cashAccount.name})`, callback_data: `tx_account:${cashAccount.id}` });
+  }
+  if (cardAccount) {
+    buttons.push({ text: `💳 Karte (${cardAccount.name})`, callback_data: `tx_account:${cardAccount.id}` });
+  }
+
+  if (buttons.length === 0) {
+    await ctx.reply('❌ Kein passendes Konto gefunden. Lege zuerst ein Bargeld- oder Girokonto an.');
+    ctx.session = {};
+    return;
+  }
+
+  await ctx.reply(
+    `✓ Betrag: ${formatCurrency(amountCents)}\n\nZahlungsart?`,
+    {
+      reply_markup: {
+        inline_keyboard: [buttons],
+      },
+    }
+  );
+}
+
+async function handleTxDescription(ctx: BotContext, text: string) {
+  const tx = ctx.session.tx;
+  if (!tx?.amountCents || tx.accountId == null) {
+    await ctx.reply('❌ Eingabe unvollständig. Starte mit /transaktion neu.');
+    ctx.session = {};
+    return;
+  }
+
+  // Parse description like a free-text transaction
+  const parsed = await parseTransaction(`${(tx.amountCents / 100).toFixed(2).replace('.', ',')} ${text}`);
+
+  let categoryId: number | null = null;
+  if (parsed?.category) {
+    const cat = await db.query.categories.findFirst({
+      where: eq(categories.name, parsed.category),
+    });
+    categoryId = cat?.id || null;
+  }
+
+  const [created] = await db
+    .insert(transactions)
+    .values({
+      occurredOn: parsed?.date || new Date(),
+      amountCents: tx.amountCents,
+      direction: 'expense',
+      categoryId,
+      accountId: tx.accountId,
+      merchant: parsed?.merchant,
+      note: parsed?.note || null,
+      source: 'telegram',
+      rawInput: text,
+      confidence: parsed?.confidence || 0.8,
+      confirmed: true,
+    })
+    .returning();
+
+  ctx.session.lastTransactionId = created.id;
+  ctx.session = {};
+
+  const account = await db.query.accounts.findFirst({
+    where: eq(accounts.id, tx.accountId),
+  });
+
+  await ctx.reply(
+    '━━━━━━━━━━━━━━━━━━━━\n' +
+      `✅ Transaktion gespeichert\n\n` +
+      `💳 ${account?.name || 'Konto'}\n` +
+      `💰 ${formatCurrency(tx.amountCents)}\n` +
+      `📝 ${text}\n` +
+      (parsed?.category ? `🏷 ${parsed.category}\n` : '') +
+      '━━━━━━━━━━━━━━━━━━━━'
+  );
+}
+
+export async function handleEinkommen(ctx: BotContext) {
+  ctx.session.step = 'income_amount';
+  ctx.session.income = {};
+
+  await ctx.reply(
+    '💰 Einkommen erfassen\n\n' +
+      'Betrag? (z.B. 2500)'
+  );
+}
+
+async function handleIncomeAmount(ctx: BotContext, text: string) {
+  const amountCents = parseCurrencyFuel(text);
+  if (amountCents === null || amountCents <= 0) {
+    await ctx.reply('❌ Bitte einen gültigen Betrag eingeben, z.B. 2500');
+    return;
+  }
+
+  ctx.session.income = { ...ctx.session.income, amountCents };
+  ctx.session.step = 'income_type';
+
+  const types = [
+    { label: '💼 Gehalt', value: 'Gehalt' },
+    { label: '👶 Kindergeld', value: 'Kindergeld' },
+    { label: '⏰ Überstunden', value: 'Überstunden' },
+    { label: '📦 Sonstiges', value: 'Sonstiges' },
+  ];
+
+  await ctx.reply(
+    `✓ Betrag: ${formatCurrency(amountCents)}\n\nTyp?`,
+    {
+      reply_markup: {
+        inline_keyboard: [types.map((t) => ({ text: t.label, callback_data: `income_type:${t.value}` }))],
+      },
+    }
+  );
+}
+
+async function handleIncomeNote(ctx: BotContext, text: string) {
+  const income = ctx.session.income;
+  if (!income?.amountCents || !income.type) {
+    await ctx.reply('❌ Eingabe unvollständig. Starte mit /einkommen neu.');
+    ctx.session = {};
+    return;
+  }
+
+  const notes = text === '-' ? null : text;
+
+  const defaultAccount = await db.query.accounts.findFirst({
+    where: and(isNull(accounts.archivedAt), eq(accounts.isDefaultPayment, true)),
+  });
+
+  const [created] = await db
+    .insert(transactions)
+    .values({
+      occurredOn: new Date(),
+      amountCents: income.amountCents,
+      direction: 'income',
+      categoryId: null,
+      accountId: defaultAccount?.id || null,
+      merchant: income.type,
+      note: notes,
+      source: 'telegram',
+      rawInput: `${income.type}: ${formatCurrency(income.amountCents)}`,
+      confidence: 0.95,
+      confirmed: true,
+    })
+    .returning();
+
+  ctx.session.lastTransactionId = created.id;
+  ctx.session = {};
+
+  await ctx.reply(
+    '━━━━━━━━━━━━━━━━━━━━\n' +
+      `✅ Einkommen gespeichert\n\n` +
+      `💰 ${formatCurrency(income.amountCents)}\n` +
+      `📦 ${income.type}\n` +
+      (notes ? `📝 ${notes}\n` : '') +
       '━━━━━━━━━━━━━━━━━━━━'
   );
 }
