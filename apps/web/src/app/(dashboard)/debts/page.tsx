@@ -36,7 +36,7 @@ export default async function DebtsPage() {
 
   // Calculate current balance = snapshot balance + transactions since snapshot start
   const transactionStart = snapshotPeriod
-    ? new Date(parseInt(snapshotPeriod.split('-')[0]), parseInt(snapshotPeriod.split('-')[1]), 1)
+    ? new Date(parseInt(snapshotPeriod.split('-')[0]), parseInt(snapshotPeriod.split('-')[1]) - 1, 1)
     : new Date(0);
 
   const accountIds = liabilityAccounts.map((a) => a.id);
@@ -77,7 +77,7 @@ export default async function DebtsPage() {
 
     // Realer Tilgungsfortschritt anhand der ursprünglichen Schuld
     let realProgress = 0;
-    if (originalCents && originalCents > 0 && currentBalance > 0) {
+    if (originalCents && originalCents > 0) {
       realProgress = Math.max(0, Math.min(1, (originalCents - currentBalance) / originalCents));
     }
 
@@ -175,7 +175,7 @@ export default async function DebtsPage() {
             <div className="space-y-4">
               {enrichedAccounts.map((account, index) => {
                 const progressBasis = account.debt?.originalCents ?? account.snapshotBalance;
-                const progress = progressBasis > 0 && account.currentBalance > 0
+                const progress = progressBasis > 0
                   ? Math.max(0, Math.min(100, ((progressBasis - account.currentBalance) / progressBasis) * 100))
                   : 0;
 

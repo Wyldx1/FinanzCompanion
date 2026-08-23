@@ -12,7 +12,7 @@ const goalSchema = z.object({
   targetDate: z.string().transform((s) => new Date(s)).nullable().optional(),
   priority: z.number().min(1).max(10).default(5),
   linkedAccountId: z.number().nullable().optional(),
-  monthlyPlanCents: z.number().positive().nullable().optional(),
+  monthlyPlanCents: z.number().nonnegative().nullable().optional(),
 });
 
 export async function GET() {

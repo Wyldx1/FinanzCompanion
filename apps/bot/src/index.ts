@@ -164,8 +164,16 @@ bot.use(async (ctx, next) => {
     if (ctx.message?.text?.startsWith('/start')) {
       await next();
     }
+    return;
   }
-  // Silently ignore unauthorized users
+
+  // Unauthorized: reply with pairing hint for commands
+  const text = ctx.message?.text;
+  if (text && text.startsWith('/')) {
+    await ctx.reply(
+      'Dieser Bot ist nicht mit deinem Account verknüpft. Verbinde ihn in den Web-Einstellungen unter /settings/telegram.'
+    );
+  }
 });
 
 // Commands
@@ -199,19 +207,20 @@ bot.command('start', async (ctx) => {
   await ctx.reply(
     '👋 Willkommen beim Finanz-Companion!\n\n' +
       'Verfügbare Befehle:\n' +
-      '/stand - Monatsabschluss erfassen\n' +
-      '/transaktion - Ausgabe: Betrag → Datum → Bar/Karte-Buttons → Beschreibung\n' +
-      '/einkommen - Einkommen: Betrag → Art (Gehalt/Kindergeld/Überstunden/Sonstiges) → Datum → Notiz\n' +
-      '/tanken - Tank- oder Ladevorgang erfassen\n' +
-      '/gewicht - Gewicht eintragen (optional mit Notiz)\n' +
-      '/bericht - Arbeitszeit / Baustellenbericht (Startzeit-Vorschlag 07:30)\n' +
-      '/heute - Ausgaben von heute\n' +
-      '/monat - Monatszwischenstand\n' +
-      '/undo - Letzte Eingabe rückgängig\n' +
+      '/stand - Monatsabschluss für alle aktiven Konten erfassen\n' +
+      '/transaktion - Ausgabe erfassen: Betrag → Datum → Bar/Karte-Buttons → Beschreibung\n' +
+      '/einkommen - Einkommen erfassen: Betrag → Art per Button (Gehalt/Kindergeld/Überstunden/Sonstiges) → Datum → Notiz\n' +
+      '/tanken - Tank- oder Ladevorgang erfassen: Fahrzeug → Datum → Menge → Preis → Kilometerstand\n' +
+      '/gewicht - Gewicht eintragen (optional mit einer Notiz)\n' +
+      '/bericht - Arbeitszeit / Baustellenbericht (Startzeit-Vorschlag 07:30, Pause als 30, 1,5 oder 1:30)\n' +
+      '/heute - Ausgaben von heute anzeigen\n' +
+      '/monat - Monatszwischenstand anzeigen\n' +
+      '/undo - Letzte Eingabe rückgängig machen\n' +
       '/abbruch - Aktuellen Dialog abbrechen\n' +
       '/hilfe - Diese Hilfe anzeigen\n\n' +
       'Oder schreib einfach deine Ausgaben:\n' +
       '14,80 Rewe\n' +
+      'gestern 12 döner\n' +
       '60 tanken'
   );
 });
@@ -219,15 +228,15 @@ bot.command('start', async (ctx) => {
 bot.command('hilfe', async (ctx) => {
   await ctx.reply(
     '📊 Finanz-Companion Befehle:\n\n' +
-      '/stand - Monatsabschluss erfassen\n' +
-      '/transaktion - Ausgabe: Betrag → Datum → Bar/Karte-Buttons → Beschreibung\n' +
-      '/einkommen - Einkommen: Betrag → Art (Gehalt/Kindergeld/Überstunden/Sonstiges) → Datum → Notiz\n' +
-      '/tanken - Tank- oder Ladevorgang erfassen\n' +
-      '/gewicht - Gewicht eintragen (optional mit Notiz)\n' +
+      '/stand - Monatsabschluss für alle aktiven Konten erfassen\n' +
+      '/transaktion - Ausgabe erfassen: Betrag → Datum → Bar/Karte-Buttons → Beschreibung\n' +
+      '/einkommen - Einkommen erfassen: Betrag → Art per Button → Datum → Notiz\n' +
+      '/tanken - Tank- oder Ladevorgang erfassen: Fahrzeug → Datum → Menge → Preis → Kilometerstand\n' +
+      '/gewicht - Gewicht eintragen (optional mit einer Notiz)\n' +
       '/bericht - Arbeitszeit / Baustellenbericht (Startzeit-Vorschlag 07:30)\n' +
-      '/heute - Ausgaben von heute\n' +
-      '/monat - Monatszwischenstand\n' +
-      '/undo - Letzte Eingabe rückgängig\n' +
+      '/heute - Ausgaben von heute anzeigen\n' +
+      '/monat - Monatszwischenstand anzeigen\n' +
+      '/undo - Letzte Eingabe rückgängig machen\n' +
       '/abbruch - Aktuellen Dialog abbrechen\n\n' +
       'Schnellerfassung:\n' +
       '14,80 Rewe → Lebensmittel\n' +
@@ -235,7 +244,8 @@ bot.command('hilfe', async (ctx) => {
       '25 döner mit Max → Restaurant\n\n' +
       'Tipps:\n' +
       '• Beträge: 14,80 oder 14.80 oder 1,2k\n' +
-      '• Datum: "gestern 12 döner"'
+      '• Datum: "heute 12 döner", "gestern 12 döner"\n' +
+      '• Pause im Bericht: 30, 1,5 oder 1:30'
   );
 });
 

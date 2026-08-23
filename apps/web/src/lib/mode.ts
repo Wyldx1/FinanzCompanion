@@ -43,3 +43,10 @@ export async function setOnboardingComplete(): Promise<void> {
 export async function resetOnboarding(): Promise<void> {
   await setModuleConfig('onboarding', { complete: false });
 }
+
+export async function getEnabledModules(): Promise<string[]> {
+  const settings = await db.query.moduleSettings.findMany({
+    where: eq(moduleSettings.enabled, true),
+  });
+  return settings.map((s) => s.moduleId);
+}

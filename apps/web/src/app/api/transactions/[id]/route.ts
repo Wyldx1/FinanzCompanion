@@ -62,6 +62,33 @@ export async function PATCH(
       );
     }
 
+    // Enforce account consistency based on the resulting transaction state
+    const effectiveDirection = data.direction ?? before.direction;
+    const effectiveAccountId = data.accountId !== undefined ? data.accountId : before.accountId;
+    const effectiveTargetAccountId =
+      data.targetAccountId !== undefined ? data.targetAccountId : before.targetAccountId;
+
+    if (effectiveDirection !== 'transfer' && (effectiveAccountId === null || effectiveAccountId === undefined)) {
+      return NextResponse.json(
+        { error: { code: 'ACCOUNT_REQUIRED', message: 'Für diese Transaktion muss ein Konto angegeben werden.' } },
+        { status: 400 }
+      );
+    }
+    if (
+      effectiveDirection === 'transfer' &&
+      (effectiveAccountId === null || effectiveAccountId === undefined || effectiveTargetAccountId === null || effectiveTargetAccountId === undefined)
+    ) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'ACCOUNTS_REQUIRED',
+            message: 'Für Umbuchungen müssen Quell- und Zielkonto angegeben werden.',
+          },
+        },
+        { status: 400 }
+      );
+    }
+
     const [updated] = await db
       .update(transactions)
       .set(data)

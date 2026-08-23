@@ -25,11 +25,15 @@ export async function GET(request: NextRequest) {
     const from = searchParams.get('from');
     const to = searchParams.get('to');
     const parsedLimit = parseInt(searchParams.get('limit') || '100', 10);
-    const limit = Number.isNaN(parsedLimit) || parsedLimit < 1 ? 100 : Math.min(parsedLimit, 500);
+    const limit = Number.isNaN(parsedLimit) || parsedLimit < 1 ? 100 : Math.min(parsedLimit, 1000);
 
     const conditions = [];
     if (from) conditions.push(gte(transactions.occurredOn, new Date(from)));
-    if (to) conditions.push(lte(transactions.occurredOn, new Date(to)));
+    if (to) {
+      const toDate = new Date(to);
+      const inclusiveEnd = new Date(toDate.getFullYear(), toDate.getMonth(), toDate.getDate(), 23, 59, 59, 999);
+      conditions.push(lte(transactions.occurredOn, inclusiveEnd));
+    }
 
     const allTransactions = await db.query.transactions.findMany({
       where: conditions.length > 0 ? and(...conditions) : undefined,
@@ -55,6 +59,28 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const data = transactionSchema.parse(body);
+
+    // Enforce account consistency: non-transfers need an account, transfers need both
+    if (data.direction !== 'transfer' && (data.accountId === null || data.accountId === undefined)) {
+      return NextResponse.json(
+        { error: { code: 'ACCOUNT_REQUIRED', message: 'Für diese Transaktion muss ein Konto angegeben werden.' } },
+        { status: 400 }
+      );
+    }
+    if (
+      data.direction === 'transfer' &&
+      (data.accountId === null || data.accountId === undefined || data.targetAccountId === null || data.targetAccountId === undefined)
+    ) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'ACCOUNTS_REQUIRED',
+            message: 'Für Umbuchungen müssen Quell- und Zielkonto angegeben werden.',
+          },
+        },
+        { status: 400 }
+      );
+    }
 
     // Update category usage count if category is provided
     if (data.categoryId) {

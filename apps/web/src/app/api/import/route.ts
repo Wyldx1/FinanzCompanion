@@ -25,6 +25,8 @@ import { sql } from 'drizzle-orm';
 
 const SUPPORTED_VERSIONS = ['1.0', '2.0'];
 
+const PRESERVED_MODULE_IDS = ['telegram', 'reminder_enabled'];
+
 // Tables that are exported/imported in dependency order
 const importTables = [
   { name: 'module_settings', table: moduleSettings, key: 'moduleSettings' },
@@ -142,6 +144,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Preserve runtime module settings (e.g. Telegram pairing, reminders)
+    const allModuleSettings = await db.query.moduleSettings.findMany();
+    const settingsToRestore = allModuleSettings.filter((s) =>
+      PRESERVED_MODULE_IDS.includes(s.moduleId)
+    );
+
     await db.transaction(async (tx) => {
       // Truncate all user tables (preserve users/sessions)
       for (const tableName of truncateOrder) {
@@ -155,6 +163,25 @@ export async function POST(request: NextRequest) {
 
         const normalized = rows.map((row) => normalizeRow(row as Record<string, unknown>));
         await tx.insert(table).values(normalized as never);
+      }
+
+      // Restore preserved module settings so Telegram pairing / reminders survive the import
+      for (const setting of settingsToRestore) {
+        await tx
+          .insert(moduleSettings)
+          .values({
+            moduleId: setting.moduleId,
+            enabled: setting.enabled,
+            config: setting.config,
+          })
+          .onConflictDoUpdate({
+            target: moduleSettings.moduleId,
+            set: {
+              enabled: setting.enabled,
+              config: setting.config,
+              updatedAt: new Date(),
+            },
+          });
       }
     });
 

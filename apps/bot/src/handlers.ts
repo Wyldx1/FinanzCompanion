@@ -317,7 +317,11 @@ async function handleSnapshotInput(ctx: BotContext, text: string) {
   });
 
   const currentAccount = activeAccounts[index];
-  if (!currentAccount) return;
+  if (!currentAccount) {
+    await ctx.reply('❌ Konto wurde zwischenzeitlich gelöscht. Bitte starte neu.');
+    ctx.session = {};
+    return;
+  }
 
   // Get previous balance
   const prevPeriod = getPreviousPeriod(period);
@@ -381,6 +385,14 @@ async function handleNoteInput(ctx: BotContext, text: string) {
   const period = ctx.session.snapshotPeriod!;
   const balances = ctx.session.snapshotBalances!;
   const income = ctx.session.snapshotIncome || 0;
+
+  if (!balances || Object.keys(balances).length === 0) {
+    await ctx.reply(
+      '❌ Keine Kontostände erfasst. Monatsabschluss wurde nicht gespeichert. Starte mit /stand neu.'
+    );
+    ctx.session = {};
+    return;
+  }
 
   // Save snapshot
   const existing = await db.query.snapshots.findFirst({
@@ -480,6 +492,13 @@ async function handleTransactionInput(ctx: BotContext, text: string) {
     where: and(isNull(accounts.archivedAt), eq(accounts.isDefaultPayment, true)),
   });
 
+  if (!defaultAccount) {
+    await ctx.reply(
+      '❌ Kein Standard-Zahlungskonto gefunden. Lege zuerst ein Konto in der Web-App an oder nutze /transaktion.'
+    );
+    return;
+  }
+
   // Insert transaction
   const [tx] = await db
     .insert(transactions)
@@ -488,7 +507,7 @@ async function handleTransactionInput(ctx: BotContext, text: string) {
       amountCents: result.amountCents,
       direction: result.direction,
       categoryId,
-      accountId: defaultAccount?.id || null,
+      accountId: defaultAccount.id,
       merchant: result.merchant,
       note: result.note,
       source: 'telegram',
@@ -631,10 +650,39 @@ async function handleWorkTimeEnd(ctx: BotContext, text: string) {
   await ctx.reply(`✓ Ende: ${time}\n\nPause in Minuten? (0 für keine)`);
 }
 
+function parseDurationMinutes(value: string): number | null {
+  const cleaned = value.trim().toLowerCase();
+  if (!cleaned) return null;
+
+  // Format HH:MM bzw. H:MM
+  const timeMatch = cleaned.match(/^(\d+):(\d+)$/);
+  if (timeMatch) {
+    const h = parseInt(timeMatch[1]);
+    const m = parseInt(timeMatch[2]);
+    if (isNaN(h) || isNaN(m) || m < 0 || m > 59) return null;
+    return h * 60 + m;
+  }
+
+  // Einheiten entfernen und Komma in Punkt wandeln
+  const numeric = cleaned.replace(/\s/g, '').replace(/[a-zäöü]+$/g, '').replace(',', '.');
+  const num = parseFloat(numeric);
+  if (isNaN(num) || num < 0) return null;
+
+  // Explizite Stundenangabe oder Dezimalwert werden als Stunden interpretiert
+  const explicitHours = /(stunden?|h)$/.test(cleaned);
+  if (explicitHours || !Number.isInteger(num)) {
+    return Math.round(num * 60);
+  }
+
+  return Math.round(num);
+}
+
 async function handleWorkTimeBreak(ctx: BotContext, text: string) {
-  const minutes = parseInt(text.replace(/[^0-9]/g, ''));
-  if (isNaN(minutes) || minutes < 0) {
-    await ctx.reply('❌ Bitte gib die Pause in Minuten an, z.B. 30');
+  const minutes = parseDurationMinutes(text);
+  if (minutes === null || minutes < 0) {
+    await ctx.reply(
+      '❌ Bitte gib die Pause als Minuten (30), Stunden (1,5) oder im Format H:MM (1:30) an.'
+    );
     return;
   }
   ctx.session.workTime = { ...ctx.session.workTime, breakMinutes: minutes };
@@ -1030,6 +1078,21 @@ async function handleFuelOdometer(ctx: BotContext, text: string) {
     return;
   }
 
+  const vehicleId = ctx.session.fuel?.vehicleId;
+  const lastEntry = vehicleId
+    ? await db.query.fuelEntries.findFirst({
+        where: eq(fuelEntries.vehicleId, vehicleId),
+        orderBy: [desc(fuelEntries.odometerKm)],
+      })
+    : null;
+
+  if (lastEntry && km < lastEntry.odometerKm) {
+    await ctx.reply(
+      `❌ Der neue Kilometerstand (${km} km) kann nicht niedriger sein als der letzte Eintrag (${lastEntry.odometerKm} km).`
+    );
+    return;
+  }
+
   ctx.session.fuel = { ...ctx.session.fuel, odometerKm: km };
   ctx.session.step = 'fuel_notes';
 
@@ -1298,7 +1361,9 @@ async function handleTxAmount(ctx: BotContext, text: string) {
 async function handleTxDescription(ctx: BotContext, text: string) {
   const tx = ctx.session.tx;
   if (!tx?.amountCents || tx.accountId == null) {
-    await ctx.reply('❌ Eingabe unvollständig. Starte mit /transaktion neu.');
+    await ctx.reply(
+      '❌ Eingabe unvollständig: Kein Konto ausgewählt. Starte mit /transaktion neu und wähle ein Konto.'
+    );
     ctx.session = {};
     return;
   }
@@ -1417,6 +1482,13 @@ async function handleIncomeNote(ctx: BotContext, text: string) {
     where: and(isNull(accounts.archivedAt), eq(accounts.isDefaultPayment, true)),
   });
 
+  if (!defaultAccount) {
+    await ctx.reply(
+      '❌ Kein Standard-Zahlungskonto gefunden. Lege zuerst ein Konto in der Web-App an.'
+    );
+    return;
+  }
+
   const [created] = await db
     .insert(transactions)
     .values({
@@ -1424,7 +1496,7 @@ async function handleIncomeNote(ctx: BotContext, text: string) {
       amountCents: income.amountCents,
       direction: 'income',
       categoryId: null,
-      accountId: defaultAccount?.id || null,
+      accountId: defaultAccount.id,
       merchant: income.type,
       note: notes,
       source: 'telegram',

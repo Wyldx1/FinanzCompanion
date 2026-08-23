@@ -19,6 +19,11 @@ function parseTimeToHMS(value: string): string {
   return value.length === 5 ? `${value}:00` : value;
 }
 
+function timeToMinutes(value: string): number {
+  const [hours, minutes] = value.split(':').map(Number);
+  return hours * 60 + minutes;
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
@@ -67,6 +72,13 @@ export async function PATCH(
     const endTime = data.endTime ? parseTimeToHMS(data.endTime) : before.endTime;
     const breakMinutes = data.breakMinutes ?? before.breakMinutes;
     const date = data.date ? new Date(data.date) : before.date;
+
+    if (timeToMinutes(endTime) <= timeToMinutes(startTime)) {
+      return NextResponse.json(
+        { error: { code: 'VALIDATION_FAILED', message: 'Endzeit muss nach Startzeit liegen' } },
+        { status: 400 }
+      );
+    }
 
     const stats = calculateWorkTime(startTime, endTime, breakMinutes, date);
 

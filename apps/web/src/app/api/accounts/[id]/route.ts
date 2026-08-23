@@ -10,7 +10,7 @@ import {
   quickActions,
   goals,
 } from '@finanz/db/schema';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 
 const updateSchema = z.object({
@@ -136,16 +136,33 @@ export async function DELETE(
   }
 
   if (hard) {
+    const accountId = parseInt(id);
+
+    // Block hard-delete if transactions still reference this account to avoid
+    // dangling/orphaned transactions that would disappear from calculations.
+    const relatedTransactions = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(transactions)
+      .where(eq(transactions.accountId, accountId));
+
+    if (relatedTransactions[0]?.count > 0) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'HAS_TRANSACTIONS',
+            message:
+              'Konto kann nicht gelöscht werden, da noch Transaktionen vorhanden sind. Archiviere das Konto oder lösche zuerst die Transaktionen.',
+          },
+        },
+        { status: 400 }
+      );
+    }
+
     // Remove dependent data / clear references before deleting the account
     try {
-      const accountId = parseInt(id);
       await db.transaction(async (tx) => {
         await tx.delete(snapshotBalances).where(eq(snapshotBalances.accountId, accountId));
         await tx.delete(debts).where(eq(debts.accountId, accountId));
-        await tx
-          .update(transactions)
-          .set({ accountId: null })
-          .where(eq(transactions.accountId, accountId));
         await tx
           .update(quickActions)
           .set({ accountId: null })

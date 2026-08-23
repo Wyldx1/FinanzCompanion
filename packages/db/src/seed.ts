@@ -101,6 +101,11 @@ async function seed() {
       { moduleId: 'debts', enabled: false, config: {} },
       { moduleId: 'goals', enabled: false, config: {} },
       { moduleId: 'coach', enabled: true, config: {} },
+      { moduleId: 'reminder_enabled', enabled: true, config: {} },
+      { moduleId: 'telegram', enabled: false, config: {} },
+      { moduleId: 'worktime', enabled: true, config: {} },
+      { moduleId: 'weight', enabled: true, config: {} },
+      { moduleId: 'fuel', enabled: true, config: {} },
     ];
 
     await db.insert(moduleSettings).values(moduleData);

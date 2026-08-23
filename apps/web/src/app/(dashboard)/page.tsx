@@ -10,12 +10,12 @@ import { DashboardToolsOverview } from '@/components/dashboard-tools-overview';
 import { TrendingUp, Plus, Sparkles, PieChart as PieChartIcon, BarChart3 } from 'lucide-react';
 import Link from 'next/link';
 import { db } from '@/lib/db';
-import { fuelEntries, repairs, workTimeEntries, weightEntries, recurringExpenses } from '@finanz/db/schema';
+import { fuelEntries, repairs, workTimeEntries, weightEntries, recurringExpenses, moduleSettings } from '@finanz/db/schema';
 import { desc } from 'drizzle-orm';
 
 export default async function DashboardPage() {
   const currentPeriod = getCurrentPeriod();
-  const [metrics, history, categoryExpenses, spendingTrend, projectedSummary, monthlyTxSummary, allFuelEntries, allRepairs, allWorkTimeEntries, allWeightEntries, allRecurringExpenses] = await Promise.all([
+  const [metrics, history, categoryExpenses, spendingTrend, projectedSummary, monthlyTxSummary, allFuelEntries, allRepairs, allWorkTimeEntries, allWeightEntries, allRecurringExpenses, moduleSettingsList] = await Promise.all([
     calculateMetrics(currentPeriod),
     getNetworthHistory(24),
     getCategoryExpenses(currentPeriod),
@@ -39,9 +39,20 @@ export default async function DashboardPage() {
     db.query.recurringExpenses.findMany({
       orderBy: [desc(recurringExpenses.createdAt)],
     }),
+    db.query.moduleSettings.findMany(),
   ]);
 
-  const hasData = metrics !== null;
+  const enabledModules = moduleSettingsList.filter((s) => s.enabled).map((s) => s.moduleId);
+  const hasAnyActivity =
+    metrics !== null ||
+    projectedSummary.lastSnapshotPeriod !== null ||
+    monthlyTxSummary.incomeCents !== 0 ||
+    monthlyTxSummary.expenseCents !== 0 ||
+    allFuelEntries.length > 0 ||
+    allRepairs.length > 0 ||
+    allWorkTimeEntries.length > 0 ||
+    allWeightEntries.length > 0 ||
+    allRecurringExpenses.length > 0;
 
   return (
     <div className="space-y-8">
@@ -59,7 +70,7 @@ export default async function DashboardPage() {
         </Link>
       </div>
 
-      {!hasData ? (
+      {!hasAnyActivity ? (
         <Card className="glass gradient-border overflow-hidden">
           <CardContent className="flex flex-col items-center justify-center py-16">
             <div className="w-20 h-20 rounded-full bg-primary/20 flex items-center justify-center mb-6 glow">
@@ -69,7 +80,7 @@ export default async function DashboardPage() {
               Willkommen beim Finanz-Companion
             </p>
             <p className="text-muted-foreground mb-6 text-center max-w-md">
-              Erstelle deinen ersten Monatsabschluss, um deine Vermögensentwicklung zu tracken.
+              Erstelle deinen ersten Monatsabschluss oder erfasse Transaktionen, um deine Finanzen zu tracken.
             </p>
             <Link href="/snapshot/new">
               <Button size="lg" className="glow hover-lift">
@@ -82,41 +93,43 @@ export default async function DashboardPage() {
       ) : (
         <>
           {/* Key Metrics */}
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 stagger-children">
-            <MetricCard
-              title="Nettovermögen"
-              value={formatCurrency(metrics.networthCents)}
-              icon={metrics.networthChangeCents === null || metrics.networthChangeCents >= 0 ? 'TrendingUp' : 'TrendingDown'}
-              trend={metrics.networthChangeCents === null ? 'neutral' : metrics.networthChangeCents >= 0 ? 'up' : 'down'}
-              subtitle={metrics.networthChangeCents === null
-                ? 'noch keine Daten'
-                : `${metrics.networthChangeCents >= 0 ? '+' : ''}${formatCurrency(metrics.networthChangeCents)}`}
-            />
+          {metrics && (
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 stagger-children">
+              <MetricCard
+                title="Nettovermögen"
+                value={formatCurrency(metrics.networthCents)}
+                icon={metrics.networthChangeCents === null || metrics.networthChangeCents >= 0 ? 'TrendingUp' : 'TrendingDown'}
+                trend={metrics.networthChangeCents === null ? 'neutral' : metrics.networthChangeCents >= 0 ? 'up' : 'down'}
+                subtitle={metrics.networthChangeCents === null
+                  ? 'noch keine Daten'
+                  : `${metrics.networthChangeCents >= 0 ? '+' : ''}${formatCurrency(metrics.networthChangeCents)}`}
+              />
 
-            <MetricCard
-              title="Liquide Mittel"
-              value={formatCurrency(metrics.liquidCents)}
-              icon="Wallet"
-              color="mint"
-              subtitle="Giro, Bargeld, Tagesgeld"
-            />
+              <MetricCard
+                title="Liquide Mittel"
+                value={formatCurrency(metrics.liquidCents)}
+                icon="Wallet"
+                color="mint"
+                subtitle="Giro, Bargeld, Tagesgeld"
+              />
 
-            <MetricCard
-              title="Schulden"
-              value={formatCurrency(metrics.debtsCents)}
-              icon="CreditCard"
-              color="pink"
-              subtitle="Offene Verbindlichkeiten"
-            />
+              <MetricCard
+                title="Schulden"
+                value={formatCurrency(metrics.debtsCents)}
+                icon="CreditCard"
+                color="pink"
+                subtitle="Offene Verbindlichkeiten"
+              />
 
-            <MetricCard
-              title="Runway"
-              value={`${metrics.runwayMonths.toFixed(1)} Monate`}
-              icon="Clock"
-              color="blue"
-              subtitle="Liquide / Median-Ausgaben"
-            />
-          </div>
+              <MetricCard
+                title="Runway"
+                value={metrics.runwayMonths === null ? 'nicht berechenbar' : `${metrics.runwayMonths.toFixed(1)} Monate`}
+                icon="Clock"
+                color="blue"
+                subtitle="Liquide / Median-Ausgaben"
+              />
+            </div>
+          )}
 
           {/* Tools Overview */}
           <DashboardToolsOverview
@@ -125,7 +138,8 @@ export default async function DashboardPage() {
             workTimeEntries={allWorkTimeEntries}
             weightEntries={allWeightEntries}
             recurringExpenses={allRecurringExpenses}
-            debtsCents={metrics.debtsCents}
+            debtsCents={metrics?.debtsCents ?? projectedSummary.debts}
+            enabledModules={enabledModules}
           />
 
           {/* Projected Current State */}
@@ -201,7 +215,7 @@ export default async function DashboardPage() {
           </div>
 
           {/* Networth Chart */}
-          {history.length > 0 && (
+          {metrics && history.length > 0 && (
             <Card className="glass hover-lift overflow-hidden">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -216,7 +230,8 @@ export default async function DashboardPage() {
           )}
 
           {/* Category & Trend Charts */}
-          <div className="grid gap-4 md:grid-cols-2">
+          {metrics && (
+            <div className="grid gap-4 md:grid-cols-2">
             <Card className="glass hover-lift overflow-hidden">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -265,9 +280,11 @@ export default async function DashboardPage() {
               </CardContent>
             </Card>
           </div>
+          )}
 
           {/* Monthly Summary */}
-          <div className="grid gap-4 lg:grid-cols-2">
+          {metrics && (
+            <div className="grid gap-4 lg:grid-cols-2">
             <Card className="glass hover-lift">
               <CardHeader>
                 <CardTitle>Monatsbilanz</CardTitle>
@@ -389,6 +406,7 @@ export default async function DashboardPage() {
               </CardContent>
             </Card>
           </div>
+          )}
         </>
       )}
     </div>

@@ -41,26 +41,37 @@ import {
 // NAVIGATIONSDATEN
 // =====================================================
 
-const financeItems = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: React.ElementType;
+  moduleId?: string;
+};
+
+const financeItems: NavItem[] = [
   { href: '/accounts', label: 'Konten', icon: Wallet },
   { href: '/transactions', label: 'Transaktionen', icon: CreditCard },
   { href: '/recurring-expenses', label: 'Daueraufträge', icon: Repeat },
-  { href: '/debts', label: 'Schulden', icon: TrendingDown },
-  { href: '/goals', label: 'Ziele', icon: Target },
+  { href: '/debts', label: 'Schulden', icon: TrendingDown, moduleId: 'debts' },
+  { href: '/goals', label: 'Ziele', icon: Target, moduleId: 'goals' },
   { href: '/history', label: 'Historie', icon: History },
 ];
 
-const toolItems = [
-  { href: '/fuel', label: 'Tanken', icon: Fuel },
-  { href: '/worktime', label: 'Arbeitszeit', icon: HardHat },
-  { href: '/weight', label: 'Gewicht', icon: Scale },
+const toolItems: NavItem[] = [
+  { href: '/fuel', label: 'Tanken', icon: Fuel, moduleId: 'fuel' },
+  { href: '/worktime', label: 'Arbeitszeit', icon: HardHat, moduleId: 'worktime' },
+  { href: '/weight', label: 'Gewicht', icon: Scale, moduleId: 'weight' },
 ];
 
-const mainItems = [
+const mainItems: NavItem[] = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/coach', label: 'Coach', icon: Bot },
+  { href: '/coach', label: 'Coach', icon: Bot, moduleId: 'coach' },
   { href: '/settings', label: 'Einstellungen', icon: Settings },
 ];
+
+function useFilteredItems(items: NavItem[], enabledModules: string[]): NavItem[] {
+  return items.filter((item) => !item.moduleId || enabledModules.includes(item.moduleId));
+}
 
 // =====================================================
 // HILFSFUNKTIONEN
@@ -74,9 +85,12 @@ function isInGroup(pathname: string, items: { href: string }[]): boolean {
 // DESKTOP-NAVIGATION
 // =====================================================
 
-export function Navigation() {
+export function Navigation({ enabledModules }: { enabledModules: string[] }) {
   const pathname = usePathname();
   const router = useRouter();
+  const visibleFinanceItems = useFilteredItems(financeItems, enabledModules);
+  const visibleToolItems = useFilteredItems(toolItems, enabledModules);
+  const visibleMainItems = useFilteredItems(mainItems, enabledModules);
 
   async function handleLogout() {
     await fetch('/api/auth/logout', { method: 'POST' });
@@ -104,23 +118,29 @@ export function Navigation() {
             <NavLink href="/" label="Dashboard" icon={LayoutDashboard} pathname={pathname} />
 
             {/* Finanzen Dropdown */}
-            <NavDropdown
-              label="Finanzen"
-              icon={Wallet}
-              items={financeItems}
-              pathname={pathname}
-            />
+            {visibleFinanceItems.length > 0 && (
+              <NavDropdown
+                label="Finanzen"
+                icon={Wallet}
+                items={visibleFinanceItems}
+                pathname={pathname}
+              />
+            )}
 
             {/* Tools Dropdown */}
-            <NavDropdown
-              label="Tools"
-              icon={Wrench}
-              items={toolItems}
-              pathname={pathname}
-            />
+            {visibleToolItems.length > 0 && (
+              <NavDropdown
+                label="Tools"
+                icon={Wrench}
+                items={visibleToolItems}
+                pathname={pathname}
+              />
+            )}
 
             {/* Coach */}
-            <NavLink href="/coach" label="Coach" icon={Bot} pathname={pathname} />
+            {visibleMainItems.some((item) => item.href === '/coach') && (
+              <NavLink href="/coach" label="Coach" icon={Bot} pathname={pathname} />
+            )}
 
             {/* Einstellungen */}
             <NavLink href="/settings" label="Einstellungen" icon={Settings} pathname={pathname} />
@@ -227,7 +247,7 @@ function NavDropdown({
 // MOBILE-NAVIGATION
 // =====================================================
 
-export function MobileNav() {
+export function MobileNav({ enabledModules }: { enabledModules: string[] }) {
   const pathname = usePathname();
   const router = useRouter();
   const [openDialog, setOpenDialog] = useState<'finance' | 'tools' | 'more' | null>(null);
@@ -239,28 +259,39 @@ export function MobileNav() {
     router.refresh();
   }
 
-  const financeActive = isInGroup(pathname, financeItems);
-  const toolsActive = isInGroup(pathname, toolItems);
-  const moreActive = isInGroup(pathname, mainItems.slice(1));
+  const visibleFinanceItems = useFilteredItems(financeItems, enabledModules);
+  const visibleToolItems = useFilteredItems(toolItems, enabledModules);
+  const visibleMainItems = useFilteredItems(mainItems, enabledModules);
+  const moreItems = visibleMainItems.filter((item) => item.href !== '/');
+
+  const financeActive = isInGroup(pathname, visibleFinanceItems);
+  const toolsActive = isInGroup(pathname, visibleToolItems);
+  const moreActive = isInGroup(pathname, moreItems);
 
   return (
     <>
       <nav className="fixed bottom-0 left-0 right-0 z-50 glass border-t border-white/5 md:hidden safe-area-pb">
         <div className="flex justify-around py-2 px-1">
           <MobileNavLink href="/" label="Dashboard" icon={LayoutDashboard} pathname={pathname} />
-          <MobileNavButton
-            label="Finanzen"
-            icon={Wallet}
-            isActive={financeActive}
-            onClick={() => setOpenDialog('finance')}
-          />
-          <MobileNavButton
-            label="Tools"
-            icon={Wrench}
-            isActive={toolsActive}
-            onClick={() => setOpenDialog('tools')}
-          />
-          <MobileNavLink href="/coach" label="Coach" icon={Bot} pathname={pathname} />
+          {visibleFinanceItems.length > 0 && (
+            <MobileNavButton
+              label="Finanzen"
+              icon={Wallet}
+              isActive={financeActive}
+              onClick={() => setOpenDialog('finance')}
+            />
+          )}
+          {visibleToolItems.length > 0 && (
+            <MobileNavButton
+              label="Tools"
+              icon={Wrench}
+              isActive={toolsActive}
+              onClick={() => setOpenDialog('tools')}
+            />
+          )}
+          {visibleMainItems.some((item) => item.href === '/coach') && (
+            <MobileNavLink href="/coach" label="Coach" icon={Bot} pathname={pathname} />
+          )}
           <MobileNavButton
             label="Mehr"
             icon={MoreHorizontal}
@@ -275,7 +306,7 @@ export function MobileNav() {
         open={openDialog === 'finance'}
         onOpenChange={(open) => !open && setOpenDialog(null)}
         title="Finanzen"
-        items={financeItems}
+        items={visibleFinanceItems}
         pathname={pathname}
       />
 
@@ -284,7 +315,7 @@ export function MobileNav() {
         open={openDialog === 'tools'}
         onOpenChange={(open) => !open && setOpenDialog(null)}
         title="Tools"
-        items={toolItems}
+        items={visibleToolItems}
         pathname={pathname}
       />
 

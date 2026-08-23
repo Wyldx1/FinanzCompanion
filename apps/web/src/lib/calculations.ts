@@ -3,6 +3,16 @@ import { accounts, categories, recurringExpenses, snapshots, snapshotBalances, t
 import { eq, and, gte, lte, lt, desc, isNull, sql } from 'drizzle-orm';
 import { getPreviousPeriod } from './utils';
 
+function median(values: number[]): number | null {
+  if (values.length === 0) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  if (sorted.length % 2 === 0) {
+    return (sorted[mid - 1] + sorted[mid]) / 2;
+  }
+  return sorted[mid];
+}
+
 function getNextPeriod(period: string): string {
   const [year, month] = period.split('-').map(Number);
   const date = new Date(year, month, 1);
@@ -25,7 +35,7 @@ export interface SnapshotMetrics {
   trackedCents: number;
   explainedRatio: number | null;
   savingsRate: number | null;
-  runwayMonths: number;
+  runwayMonths: number | null;
 }
 
 export async function getSnapshotWithBalances(period: string) {
@@ -253,11 +263,14 @@ export async function calculateMetrics(period: string): Promise<SnapshotMetrics 
     if (s !== null && s > 0) spends.push(s);
   }
 
-  let runwayMonths = 0;
+  let runwayMonths: number | null = null;
   if (spends.length > 0) {
-    spends.sort((a, b) => a - b);
-    const medianSpend = spends[Math.floor(spends.length / 2)];
-    runwayMonths = medianSpend > 0 ? current.liquid / medianSpend : 0;
+    const medianSpend = median(spends);
+    if (medianSpend !== null && medianSpend > 0) {
+      runwayMonths = Math.max(0, current.liquid / medianSpend);
+    } else {
+      runwayMonths = 0;
+    }
   }
 
   return {

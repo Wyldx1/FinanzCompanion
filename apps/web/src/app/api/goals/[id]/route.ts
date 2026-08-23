@@ -12,7 +12,7 @@ const updateSchema = z.object({
   targetDate: z.string().transform((s) => new Date(s)).nullable().optional(),
   priority: z.number().min(1).max(10).optional(),
   linkedAccountId: z.number().nullable().optional(),
-  monthlyPlanCents: z.number().positive().nullable().optional(),
+  monthlyPlanCents: z.number().nonnegative().nullable().optional(),
   isActive: z.boolean().optional(),
   achievedAt: z.string().datetime().transform((s) => new Date(s)).nullable().optional(),
 });

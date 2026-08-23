@@ -59,6 +59,7 @@ interface DashboardToolsOverviewProps {
   weightEntries: WeightEntry[];
   recurringExpenses: RecurringExpense[];
   debtsCents: number;
+  enabledModules: string[];
 }
 
 function getWeekRange(date: Date): { start: Date; end: Date } {
@@ -85,7 +86,9 @@ export function DashboardToolsOverview({
   weightEntries,
   recurringExpenses,
   debtsCents,
+  enabledModules,
 }: DashboardToolsOverviewProps) {
+  const isModuleEnabled = (moduleId: string) => enabledModules.includes(moduleId);
   const now = new Date();
   const currentPeriod = getCurrentPeriod();
 
@@ -208,7 +211,7 @@ export function DashboardToolsOverview({
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         {/* Work time */}
-        {workTimeEntries.length > 0 && (
+        {isModuleEnabled('worktime') && workTimeEntries.length > 0 && (
           <Link href="/worktime">
             <Card className="glass hover-lift overflow-hidden h-full">
               <CardContent className="p-6">
@@ -230,7 +233,7 @@ export function DashboardToolsOverview({
         )}
 
         {/* Weight */}
-        {weightEntries.length > 0 && (
+        {isModuleEnabled('weight') && weightEntries.length > 0 && (
           <Link href="/weight">
             <Card className="glass hover-lift overflow-hidden h-full">
               <CardContent className="p-6">
@@ -254,7 +257,7 @@ export function DashboardToolsOverview({
         )}
 
         {/* Latest fuel entry */}
-        {latestFuelEntry && (
+        {isModuleEnabled('fuel') && latestFuelEntry && (
           <Link href="/fuel">
             <Card className="glass hover-lift overflow-hidden h-full">
               <CardContent className="p-6">
@@ -278,7 +281,7 @@ export function DashboardToolsOverview({
         )}
 
         {/* Debts */}
-        {debtsCents > 0 && (
+        {isModuleEnabled('debts') && debtsCents > 0 && (
           <Link href="/debts">
             <Card className="glass hover-lift overflow-hidden h-full">
               <CardContent className="p-6">
@@ -320,7 +323,7 @@ export function DashboardToolsOverview({
         )}
 
         {/* Fuel / Vehicles */}
-        {vehicleSummaries.map((summary) => {
+        {isModuleEnabled('fuel') && vehicleSummaries.map((summary) => {
           const Icon = summary.vehicle.type === 'electric' ? Zap : Fuel;
           return (
             <Link key={summary.vehicle.id} href="/fuel">
@@ -351,7 +354,7 @@ export function DashboardToolsOverview({
         })}
 
         {/* Monthly vehicle costs */}
-        {(fuelEntries.length > 0 || repairs.length > 0) && (
+        {isModuleEnabled('fuel') && (fuelEntries.length > 0 || repairs.length > 0) && (
           <Link href="/fuel">
             <Card className="glass hover-lift overflow-hidden h-full">
               <CardContent className="p-6">

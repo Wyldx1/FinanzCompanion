@@ -47,16 +47,28 @@ function parseAmount(str: string): number | null {
 }
 
 function parseDate(text: string): Date {
+  const lower = text.toLowerCase().trim();
   const now = new Date();
-  const lower = text.toLowerCase();
+  // Server-lokale Mitternacht als Bezugspunkt, damit Uhrzeiten/Tagesgrenzen konsistent sind
+  const date = new Date(now.getFullYear(), now.getMonth(), now.getDate());
 
   if (lower === 'gestern') {
-    now.setDate(now.getDate() - 1);
+    date.setDate(date.getDate() - 1);
   } else if (lower === 'vorgestern') {
-    now.setDate(now.getDate() - 2);
+    date.setDate(date.getDate() - 2);
+  } else if (lower !== 'heute') {
+    // Wochentage: letztes Vorkommen des genannten Tags (heute ausgeschlossen)
+    const weekdayNames = ['sonntag', 'montag', 'dienstag', 'mittwoch', 'donnerstag', 'freitag', 'samstag'];
+    const targetDay = weekdayNames.indexOf(lower);
+    if (targetDay !== -1) {
+      const currentDay = date.getDay();
+      let diff = currentDay - targetDay;
+      if (diff <= 0) diff += 7;
+      date.setDate(date.getDate() - diff);
+    }
   }
 
-  return now;
+  return date;
 }
 
 const INCOME_KEYWORDS = ['gehalt', 'lohn', 'kindergeld', 'überstunden', 'überweisung', 'einnahme', 'zinsen', 'dividende', 'rückzahlung'];
