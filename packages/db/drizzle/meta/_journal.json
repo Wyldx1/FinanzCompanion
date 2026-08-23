@@ -43,6 +43,13 @@
       "when": 1787484220748,
       "tag": "0005_colossal_hercules",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1787485644388,
+      "tag": "0006_fresh_kinsey_walden",
+      "breakpoints": true
     }
   ]
 }

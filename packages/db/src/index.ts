@@ -10,4 +10,7 @@ export const db = drizzle(queryClient, { schema });
 
 // Export schema
 export * from './schema/index.js';
+
+// Export shared helpers
+export * from './soka.js';
 export type Database = typeof db;

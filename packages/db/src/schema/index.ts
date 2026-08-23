@@ -14,6 +14,8 @@ import {
   unique,
   primaryKey,
   pgEnum,
+  date,
+  time,
 } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
@@ -389,6 +391,31 @@ export const commitmentResultsRelations = relations(commitmentResults, ({ one })
     references: [adviceLog.id],
   }),
 }));
+
+// =====================================================
+// ARBEITSZEIT (Dachdecker / SOKA-DACH)
+// =====================================================
+
+export const workTimeEntries = pgTable(
+  'work_time_entries',
+  {
+    id: serial('id').primaryKey(),
+    date: date('date', { mode: 'date' }).notNull(),
+    startTime: time('start_time', { withTimezone: false }).notNull().default('07:30:00'),
+    endTime: time('end_time', { withTimezone: false }).notNull(),
+    breakMinutes: integer('break_minutes').notNull().default(0),
+    site: text('site'),
+    notes: text('notes'),
+    netMinutes: integer('net_minutes').notNull(),
+    targetMinutes: integer('target_minutes').notNull(),
+    overtimeMinutes: integer('overtime_minutes').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    idxWorkTimeDate: index('idx_work_time_date').on(table.date),
+  })
+);
 
 // =====================================================
 // INFRASTRUKTUR

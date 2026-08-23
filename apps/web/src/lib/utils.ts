@@ -71,3 +71,10 @@ export function formatPeriod(period: string): string {
   const date = periodToDate(period);
   return date.toLocaleDateString('de-DE', { year: 'numeric', month: 'long' });
 }
+
+export function formatMinutes(minutes: number): string {
+  const h = Math.floor(Math.abs(minutes) / 60);
+  const m = Math.abs(minutes) % 60;
+  const sign = minutes < 0 ? '-' : '';
+  return `${sign}${h}:${String(m).padStart(2, '0')} h`;
+}

@@ -6,9 +6,19 @@ import {
   snapshotBalances,
   transactions,
   categories,
+  workTimeEntries,
 } from '@finanz/db/schema';
 import { eq, isNull, and, gte, lte, lt, desc, sql } from 'drizzle-orm';
 import { parseTransaction } from './parser.js';
+import { calculateWorkTime } from '@finanz/db/soka';
+
+interface WorkTimeSession {
+  date?: string;
+  startTime?: string;
+  endTime?: string;
+  breakMinutes?: number;
+  site?: string;
+}
 
 interface SessionData {
   step?: string;
@@ -17,6 +27,7 @@ interface SessionData {
   snapshotIncome?: number;
   currentAccountIndex?: number;
   lastTransactionId?: number;
+  workTime?: WorkTimeSession;
 }
 
 type BotContext = Context & SessionFlavor<SessionData>;
@@ -152,6 +163,32 @@ export async function handleText(ctx: BotContext) {
 
   if (ctx.session.step === 'snapshot_note') {
     await handleNoteInput(ctx, text);
+    return;
+  }
+
+  // Work time dialog steps
+  if (ctx.session.step === 'worktime_start') {
+    await handleWorkTimeStart(ctx, text);
+    return;
+  }
+
+  if (ctx.session.step === 'worktime_end') {
+    await handleWorkTimeEnd(ctx, text);
+    return;
+  }
+
+  if (ctx.session.step === 'worktime_break') {
+    await handleWorkTimeBreak(ctx, text);
+    return;
+  }
+
+  if (ctx.session.step === 'worktime_site') {
+    await handleWorkTimeSite(ctx, text);
+    return;
+  }
+
+  if (ctx.session.step === 'worktime_notes') {
+    await handleWorkTimeNotes(ctx, text);
     return;
   }
 
@@ -442,6 +479,123 @@ export async function handleMonth(ctx: BotContext) {
       `Saldo: ${formatCurrency(income - expense)}\n` +
       `Transaktionen: ${monthTx.length}`
   );
+}
+
+export async function handleBericht(ctx: BotContext) {
+  const today = new Date().toISOString().split('T')[0];
+  ctx.session.step = 'worktime_start';
+  ctx.session.workTime = { date: today };
+
+  await ctx.reply(
+    '🦺 Baustellenbericht\n\n' +
+      `Startzeit? (Vorschlag 07:30, sende nur eine andere Uhrzeit, z.B. 08:00)`
+  );
+}
+
+async function handleWorkTimeStart(ctx: BotContext, text: string) {
+  const time = parseTime(text) || '07:30';
+  ctx.session.workTime = { ...ctx.session.workTime, startTime: time };
+  ctx.session.step = 'worktime_end';
+  await ctx.reply(`✓ Start: ${time}\n\nEndzeit? (z.B. 16:30)`);
+}
+
+async function handleWorkTimeEnd(ctx: BotContext, text: string) {
+  const time = parseTime(text);
+  if (!time) {
+    await ctx.reply('❌ Ungültige Uhrzeit. Bitte im Format HH:MM eingeben, z.B. 16:30');
+    return;
+  }
+  ctx.session.workTime = { ...ctx.session.workTime, endTime: time };
+  ctx.session.step = 'worktime_break';
+  await ctx.reply(`✓ Ende: ${time}\n\nPause in Minuten? (0 für keine)`);
+}
+
+async function handleWorkTimeBreak(ctx: BotContext, text: string) {
+  const minutes = parseInt(text.replace(/[^0-9]/g, ''));
+  if (isNaN(minutes) || minutes < 0) {
+    await ctx.reply('❌ Bitte gib die Pause in Minuten an, z.B. 30');
+    return;
+  }
+  ctx.session.workTime = { ...ctx.session.workTime, breakMinutes: minutes };
+  ctx.session.step = 'worktime_site';
+  await ctx.reply(`✓ Pause: ${minutes} min\n\nBaustelle / Ort?`);
+}
+
+async function handleWorkTimeSite(ctx: BotContext, text: string) {
+  ctx.session.workTime = { ...ctx.session.workTime, site: text };
+  ctx.session.step = 'worktime_notes';
+  await ctx.reply('✓ Baustelle erfasst\n\nWas wurde gemacht? (oder "-")');
+}
+
+async function handleWorkTimeNotes(ctx: BotContext, text: string) {
+  const wt = ctx.session.workTime;
+  if (!wt?.date || !wt.startTime || !wt.endTime) {
+    await ctx.reply('❌ Eingabe unvollständig. Starte mit /bericht neu.');
+    ctx.session = {};
+    return;
+  }
+
+  const notes = text === '-' ? null : text;
+  const date = new Date(wt.date);
+  const breakMinutes = wt.breakMinutes || 0;
+
+  const stats = calculateWorkTime(
+    `${wt.startTime}:00`,
+    `${wt.endTime}:00`,
+    breakMinutes,
+    date
+  );
+
+  const [created] = await db
+    .insert(workTimeEntries)
+    .values({
+      date,
+      startTime: `${wt.startTime}:00`,
+      endTime: `${wt.endTime}:00`,
+      breakMinutes,
+      site: wt.site || null,
+      notes,
+      netMinutes: stats.netMinutes,
+      targetMinutes: stats.targetMinutes,
+      overtimeMinutes: stats.overtimeMinutes,
+    })
+    .returning();
+
+  ctx.session = {};
+
+  await ctx.reply(
+    '━━━━━━━━━━━━━━━━━━━━\n' +
+      `✅ Baustellenbericht gespeichert\n\n` +
+      `📅 ${date.toLocaleDateString('de-DE')}\n` +
+      `🕐 ${wt.startTime} – ${wt.endTime}\n` +
+      `⏸ Pause: ${breakMinutes} min\n` +
+      `🏗 ${wt.site || '-'}\n` +
+      `📝 ${notes || '-'}\n\n` +
+      `Netto: ${formatMinutes(stats.netMinutes)}\n` +
+      `Soll: ${formatMinutes(stats.targetMinutes)}\n` +
+      `Überstunden: ${formatMinutes(stats.overtimeMinutes)}\n` +
+      '━━━━━━━━━━━━━━━━━━━━'
+  );
+}
+
+function formatMinutes(minutes: number): string {
+  const h = Math.floor(Math.abs(minutes) / 60);
+  const m = Math.abs(minutes) % 60;
+  const sign = minutes < 0 ? '-' : '';
+  return `${sign}${h}:${String(m).padStart(2, '0')} h`;
+}
+
+function parseTime(text: string): string | null {
+  const cleaned = text.replace(/[^0-9:]/g, '');
+  const parts = cleaned.split(':');
+  let h = parseInt(parts[0]);
+  let m = parts[1] ? parseInt(parts[1]) : 0;
+
+  if (isNaN(h) || h < 0 || h > 23 || isNaN(m) || m < 0 || m > 59) {
+    return null;
+  }
+
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
 export async function handleUndo(ctx: BotContext) {

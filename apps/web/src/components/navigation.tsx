@@ -23,6 +23,7 @@ import {
   Menu,
   LogOut,
   Repeat,
+  HardHat,
 } from 'lucide-react';
 
 const navItems = [
@@ -31,6 +32,7 @@ const navItems = [
   { href: '/transactions', label: 'Transaktionen', icon: CreditCard },
   { href: '/recurring-expenses', label: 'Daueraufträge', icon: Repeat },
   { href: '/debts', label: 'Schulden', icon: TrendingDown },
+  { href: '/worktime', label: 'Arbeitszeit', icon: HardHat },
   { href: '/history', label: 'Historie', icon: History },
   { href: '/goals', label: 'Ziele', icon: Target },
   { href: '/coach', label: 'Coach', icon: Bot },
@@ -38,8 +40,8 @@ const navItems = [
 ];
 
 // Mobile: 4 feste Slots + „Mehr"-Dialog für den Rest
-const mobileNavItems = [navItems[0], navItems[1], navItems[2], navItems[6]];
-const moreNavItems = [navItems[3], navItems[4], navItems[5], navItems[7]];
+const mobileNavItems = [navItems[0], navItems[1], navItems[2], navItems[7]];
+const moreNavItems = [navItems[3], navItems[4], navItems[5], navItems[6], navItems[8]];
 
 export function Navigation() {
   const pathname = usePathname();

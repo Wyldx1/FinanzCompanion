@@ -5,8 +5,16 @@ import postgres from 'postgres';
 import * as schema from '@finanz/db/schema';
 import { botSessions, moduleSettings } from '@finanz/db/schema';
 import { eq } from 'drizzle-orm';
-import { handleStand, handleText, handleToday, handleMonth, handleUndo } from './handlers.js';
+import { handleStand, handleText, handleToday, handleMonth, handleUndo, handleBericht } from './handlers.js';
 import { createServer } from 'http';
+
+interface WorkTimeSession {
+  date?: string;
+  startTime?: string;
+  endTime?: string;
+  breakMinutes?: number;
+  site?: string;
+}
 
 // Session data interface
 interface SessionData {
@@ -16,6 +24,7 @@ interface SessionData {
   snapshotIncome?: number;
   currentAccountIndex?: number;
   lastTransactionId?: number;
+  workTime?: WorkTimeSession;
 }
 
 type BotContext = Context & SessionFlavor<SessionData>;
@@ -152,6 +161,7 @@ bot.command('start', async (ctx) => {
     '👋 Willkommen beim Finanz-Companion!\n\n' +
       'Verfügbare Befehle:\n' +
       '/stand - Monatsabschluss erfassen\n' +
+      '/bericht - Arbeitszeit / Baustellenbericht\n' +
       '/heute - Ausgaben von heute\n' +
       '/monat - Monatszwischenstand\n' +
       '/undo - Letzte Eingabe rückgängig\n' +
@@ -166,6 +176,7 @@ bot.command('hilfe', async (ctx) => {
   await ctx.reply(
     '📊 Finanz-Companion Befehle:\n\n' +
       '/stand - Monatsabschluss erfassen\n' +
+      '/bericht - Arbeitszeit / Baustellenbericht\n' +
       '/heute - Ausgaben von heute\n' +
       '/monat - Monatszwischenstand\n' +
       '/undo - Letzte Eingabe rückgängig\n\n' +
@@ -183,6 +194,7 @@ bot.command('stand', handleStand);
 bot.command('heute', handleToday);
 bot.command('monat', handleMonth);
 bot.command('undo', handleUndo);
+bot.command('bericht', handleBericht);
 bot.command('abbruch', async (ctx) => {
   ctx.session = {};
   await ctx.reply('❌ Abgebrochen.');
@@ -205,6 +217,7 @@ function registerCommands(): void {
   bot.api
     .setMyCommands([
       { command: 'stand', description: 'Monatsabschluss erfassen' },
+      { command: 'bericht', description: 'Arbeitszeit / Baustellenbericht' },
       { command: 'heute', description: 'Ausgaben von heute' },
       { command: 'monat', description: 'Monatszwischenstand' },
       { command: 'undo', description: 'Letzte Eingabe rückgängig' },
