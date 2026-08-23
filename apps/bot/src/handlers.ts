@@ -791,9 +791,10 @@ export async function handleCallback(ctx: BotContext) {
     ctx.session.fuel = { ...ctx.session.fuel, vehicleId };
     ctx.session.step = 'fuel_date_choice';
 
+    const unitLabel = vehicle.type === 'electric' ? 'kWh' : 'Diesel';
     const today = new Date().toISOString().split('T')[0];
     await ctx.editMessageText(
-      `✓ Fahrzeug: ${vehicle.name}\n\n📅 Datum?`,
+      `✓ Fahrzeug: ${vehicle.name} (${unitLabel})\n\n📅 Datum?`,
       {
         reply_markup: {
           inline_keyboard: [
@@ -817,17 +818,13 @@ export async function handleCallback(ctx: BotContext) {
     if (prefix === 'fuel') {
       if (choice === 'today') {
         ctx.session.fuel = { ...ctx.session.fuel, date: today };
-        ctx.session.step = 'fuel_odometer';
+        ctx.session.step = 'fuel_quantity';
         const vehicleId = ctx.session.fuel?.vehicleId;
-        const lastEntry = vehicleId
-          ? await db.query.fuelEntries.findFirst({
-              where: eq(fuelEntries.vehicleId, vehicleId),
-              orderBy: [desc(fuelEntries.odometerKm)],
-            })
+        const vehicle = vehicleId
+          ? await db.query.vehicles.findFirst({ where: eq(vehicles.id, vehicleId) })
           : null;
-        let msg = `✓ Datum: ${today}\n\n🛣 Kilometerstand?`;
-        if (lastEntry) msg += ` (Letzter: ${lastEntry.odometerKm} km)`;
-        await ctx.editMessageText(msg);
+        const unit = vehicle?.type === 'electric' ? 'kWh' : 'Liter';
+        await ctx.editMessageText(`✓ Datum: ${today}\n\n⛽ Menge in ${unit}?`);
       } else {
         ctx.session.step = 'fuel_date_input';
         await ctx.editMessageText('📆 Datum eingeben (YYYY-MM-DD):');
@@ -958,21 +955,15 @@ async function handleFuelDateInput(ctx: BotContext, text: string) {
   }
 
   ctx.session.fuel = { ...ctx.session.fuel, date };
-  ctx.session.step = 'fuel_odometer';
+  ctx.session.step = 'fuel_quantity';
 
   const vehicleId = ctx.session.fuel?.vehicleId;
-  const lastEntry = vehicleId
-    ? await db.query.fuelEntries.findFirst({
-        where: eq(fuelEntries.vehicleId, vehicleId),
-        orderBy: [desc(fuelEntries.odometerKm)],
-      })
+  const vehicle = vehicleId
+    ? await db.query.vehicles.findFirst({ where: eq(vehicles.id, vehicleId) })
     : null;
+  const unit = vehicle?.type === 'electric' ? 'kWh' : 'Liter';
 
-  let msg = `✓ Datum: ${date}\n\n🛣 Kilometerstand?`;
-  if (lastEntry) {
-    msg += ` (Letzter: ${lastEntry.odometerKm} km)`;
-  }
-  await ctx.reply(msg);
+  await ctx.reply(`✓ Datum: ${date}\n\n⛽ Menge in ${unit}?`);
 }
 
 async function handleWeightDateInput(ctx: BotContext, text: string) {
@@ -1040,15 +1031,9 @@ async function handleFuelOdometer(ctx: BotContext, text: string) {
   }
 
   ctx.session.fuel = { ...ctx.session.fuel, odometerKm: km };
-  ctx.session.step = 'fuel_quantity';
+  ctx.session.step = 'fuel_notes';
 
-  const vehicleId = ctx.session.fuel?.vehicleId;
-  const vehicle = vehicleId
-    ? await db.query.vehicles.findFirst({ where: eq(vehicles.id, vehicleId) })
-    : null;
-  const unit = vehicle?.type === 'electric' ? 'kWh' : 'Liter';
-
-  await ctx.reply(`✓ Kilometerstand: ${km} km\n\n⛽ Menge in ${unit}?`);
+  await ctx.reply(`✓ Kilometerstand: ${km} km\n\n📝 Notiz? (oder "-")`);
 }
 
 async function handleFuelQuantity(ctx: BotContext, text: string) {
@@ -1093,14 +1078,41 @@ async function handleFuelPrice(ctx: BotContext, text: string) {
   }
 
   ctx.session.fuel = { ...ctx.session.fuel, pricePerUnitCents: priceCents };
-  ctx.session.step = 'fuel_notes';
 
-  await ctx.reply(`✓ Preis: ${(priceCents / 100).toFixed(3)} €\n\n📝 Notiz? (oder "-")`);
+  const vehicleId = ctx.session.fuel?.vehicleId;
+  const vehicle = vehicleId
+    ? await db.query.vehicles.findFirst({ where: eq(vehicles.id, vehicleId) })
+    : null;
+
+  if (vehicle?.type === 'electric') {
+    ctx.session.step = 'fuel_notes';
+    await ctx.reply(`✓ Preis: ${(priceCents / 100).toFixed(3)} €/kWh\n\n📝 Notiz? (oder "-")`);
+    return;
+  }
+
+  ctx.session.step = 'fuel_odometer';
+  const lastEntry = vehicleId
+    ? await db.query.fuelEntries.findFirst({
+        where: eq(fuelEntries.vehicleId, vehicleId),
+        orderBy: [desc(fuelEntries.odometerKm)],
+      })
+    : null;
+
+  let msg = `✓ Preis: ${(priceCents / 100).toFixed(3)} €/L\n\n🛣 Kilometerstand?`;
+  if (lastEntry) {
+    msg += ` (Letzter: ${lastEntry.odometerKm} km)`;
+  }
+  await ctx.reply(msg);
 }
 
 async function handleFuelNotes(ctx: BotContext, text: string) {
   const fuel = ctx.session.fuel;
-  if (!fuel?.vehicleId || !fuel.date || fuel.odometerKm == null || fuel.quantity == null || fuel.pricePerUnitCents == null) {
+  const vehicle = fuel?.vehicleId
+    ? await db.query.vehicles.findFirst({ where: eq(vehicles.id, fuel.vehicleId) })
+    : null;
+
+  const needsOdometer = vehicle?.type !== 'electric';
+  if (!fuel?.vehicleId || !fuel.date || fuel.quantity == null || fuel.pricePerUnitCents == null || (needsOdometer && fuel.odometerKm == null)) {
     await ctx.reply('❌ Eingabe unvollständig. Starte mit /tanken neu.');
     ctx.session = {};
     return;
@@ -1114,7 +1126,7 @@ async function handleFuelNotes(ctx: BotContext, text: string) {
     .values({
       vehicleId: fuel.vehicleId,
       date: new Date(fuel.date),
-      odometerKm: fuel.odometerKm,
+      odometerKm: fuel.odometerKm ?? 0,
       quantity: fuel.quantity,
       pricePerUnitCents: fuel.pricePerUnitCents,
       totalCents,
@@ -1124,10 +1136,6 @@ async function handleFuelNotes(ctx: BotContext, text: string) {
 
   ctx.session = {};
 
-  const vehicle = await db.query.vehicles.findFirst({
-    where: eq(vehicles.id, created.vehicleId),
-  });
-
   const unit = vehicle?.type === 'electric' ? 'kWh' : 'Liter';
 
   await ctx.reply(
@@ -1135,7 +1143,7 @@ async function handleFuelNotes(ctx: BotContext, text: string) {
       `✅ Tankvorgang gespeichert\n\n` +
       `🚗 ${vehicle?.name || 'Fahrzeug'}\n` +
       `📅 ${new Date(created.date).toLocaleDateString('de-DE')}\n` +
-      `🛣 ${created.odometerKm} km\n` +
+      (vehicle?.type !== 'electric' && created.odometerKm > 0 ? `🛣 ${created.odometerKm} km\n` : '') +
       `⛽ ${created.quantity.toFixed(2)} ${unit}\n` +
       `💶 ${(created.pricePerUnitCents / 100).toFixed(3)} €/${unit}\n` +
       `💰 ${formatCurrency(created.totalCents)}\n` +
