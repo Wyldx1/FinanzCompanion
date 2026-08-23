@@ -48,6 +48,8 @@ export const goalKindEnum = pgEnum('goal_kind', [
 
 export const adviceTriggerEnum = pgEnum('advice_trigger', ['monthly', 'on_demand', 'alert']);
 
+export const vehicleTypeEnum = pgEnum('vehicle_type', ['fuel', 'electric']);
+
 // =====================================================
 // KONTEN
 // =====================================================
@@ -290,6 +292,56 @@ export const debtsRelations = relations(debts, ({ one }) => ({
   account: one(accounts, {
     fields: [debts.accountId],
     references: [accounts.id],
+  }),
+}));
+
+// =====================================================
+// FAHRZEUGE & TANKEN
+// =====================================================
+
+export const vehicles = pgTable(
+  'vehicles',
+  {
+    id: serial('id').primaryKey(),
+    name: text('name').notNull().unique(),
+    type: vehicleTypeEnum('type').notNull().default('fuel'),
+    sortOrder: integer('sort_order').notNull().default(0),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    idxVehiclesSort: index('idx_vehicles_sort').on(table.sortOrder),
+  })
+);
+
+export const vehiclesRelations = relations(vehicles, ({ many }) => ({
+  fuelEntries: many(fuelEntries),
+}));
+
+export const fuelEntries = pgTable(
+  'fuel_entries',
+  {
+    id: serial('id').primaryKey(),
+    vehicleId: integer('vehicle_id')
+      .notNull()
+      .references(() => vehicles.id),
+    date: date('date', { mode: 'date' }).notNull(),
+    odometerKm: integer('odometer_km').notNull(),
+    quantity: real('quantity').notNull(),
+    pricePerUnitCents: real('price_per_unit_cents').notNull(),
+    totalCents: integer('total_cents').notNull(),
+    notes: text('notes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    idxFuelVehicleDate: index('idx_fuel_vehicle_date').on(table.vehicleId, table.date),
+  })
+);
+
+export const fuelEntriesRelations = relations(fuelEntries, ({ one }) => ({
+  vehicle: one(vehicles, {
+    fields: [fuelEntries.vehicleId],
+    references: [vehicles.id],
   }),
 }));
 

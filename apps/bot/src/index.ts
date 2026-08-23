@@ -5,7 +5,16 @@ import postgres from 'postgres';
 import * as schema from '@finanz/db/schema';
 import { botSessions, moduleSettings } from '@finanz/db/schema';
 import { eq } from 'drizzle-orm';
-import { handleStand, handleText, handleToday, handleMonth, handleUndo, handleBericht } from './handlers.js';
+import {
+  handleStand,
+  handleText,
+  handleToday,
+  handleMonth,
+  handleUndo,
+  handleBericht,
+  handleTanken,
+  handleFuelCallback,
+} from './handlers.js';
 import { createServer } from 'http';
 
 interface WorkTimeSession {
@@ -14,6 +23,14 @@ interface WorkTimeSession {
   endTime?: string;
   breakMinutes?: number;
   site?: string;
+}
+
+interface FuelSession {
+  vehicleId?: number;
+  date?: string;
+  odometerKm?: number;
+  quantity?: number;
+  pricePerUnitCents?: number;
 }
 
 // Session data interface
@@ -25,6 +42,7 @@ interface SessionData {
   currentAccountIndex?: number;
   lastTransactionId?: number;
   workTime?: WorkTimeSession;
+  fuel?: FuelSession;
 }
 
 type BotContext = Context & SessionFlavor<SessionData>;
@@ -161,6 +179,7 @@ bot.command('start', async (ctx) => {
     '👋 Willkommen beim Finanz-Companion!\n\n' +
       'Verfügbare Befehle:\n' +
       '/stand - Monatsabschluss erfassen\n' +
+      '/tanken - Tank- oder Ladevorgang erfassen\n' +
       '/bericht - Arbeitszeit / Baustellenbericht\n' +
       '/heute - Ausgaben von heute\n' +
       '/monat - Monatszwischenstand\n' +
@@ -176,6 +195,7 @@ bot.command('hilfe', async (ctx) => {
   await ctx.reply(
     '📊 Finanz-Companion Befehle:\n\n' +
       '/stand - Monatsabschluss erfassen\n' +
+      '/tanken - Tank- oder Ladevorgang erfassen\n' +
       '/bericht - Arbeitszeit / Baustellenbericht\n' +
       '/heute - Ausgaben von heute\n' +
       '/monat - Monatszwischenstand\n' +
@@ -191,6 +211,7 @@ bot.command('hilfe', async (ctx) => {
 });
 
 bot.command('stand', handleStand);
+bot.command('tanken', handleTanken);
 bot.command('heute', handleToday);
 bot.command('monat', handleMonth);
 bot.command('undo', handleUndo);
@@ -202,6 +223,9 @@ bot.command('abbruch', async (ctx) => {
 
 // Handle free text messages
 bot.on('message:text', handleText);
+
+// Handle inline keyboard callbacks (fuel vehicle selection)
+bot.on('callback_query:data', handleFuelCallback);
 
 // Error handler
 bot.catch((err) => {
@@ -217,6 +241,7 @@ function registerCommands(): void {
   bot.api
     .setMyCommands([
       { command: 'stand', description: 'Monatsabschluss erfassen' },
+      { command: 'tanken', description: 'Tank- oder Ladevorgang erfassen' },
       { command: 'bericht', description: 'Arbeitszeit / Baustellenbericht' },
       { command: 'heute', description: 'Ausgaben von heute' },
       { command: 'monat', description: 'Monatszwischenstand' },

@@ -24,12 +24,14 @@ import {
   LogOut,
   Repeat,
   HardHat,
+  Fuel,
 } from 'lucide-react';
 
 const navItems = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/accounts', label: 'Konten', icon: Wallet },
   { href: '/transactions', label: 'Transaktionen', icon: CreditCard },
+  { href: '/fuel', label: 'Tanken', icon: Fuel },
   { href: '/recurring-expenses', label: 'Daueraufträge', icon: Repeat },
   { href: '/debts', label: 'Schulden', icon: TrendingDown },
   { href: '/worktime', label: 'Arbeitszeit', icon: HardHat },
@@ -40,8 +42,8 @@ const navItems = [
 ];
 
 // Mobile: 4 feste Slots + „Mehr"-Dialog für den Rest
-const mobileNavItems = [navItems[0], navItems[1], navItems[2], navItems[7]];
-const moreNavItems = [navItems[3], navItems[4], navItems[5], navItems[6], navItems[8]];
+const mobileNavItems = [navItems[0], navItems[1], navItems[2], navItems[8]];
+const moreNavItems = [navItems[3], navItems[4], navItems[5], navItems[6], navItems[7], navItems[9]];
 
 export function Navigation() {
   const pathname = usePathname();

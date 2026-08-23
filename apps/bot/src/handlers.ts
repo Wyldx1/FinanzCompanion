@@ -7,8 +7,10 @@ import {
   transactions,
   categories,
   workTimeEntries,
+  vehicles,
+  fuelEntries,
 } from '@finanz/db/schema';
-import { eq, isNull, and, gte, lte, lt, desc, sql } from 'drizzle-orm';
+import { eq, isNull, and, gte, lte, lt, desc, sql, asc } from 'drizzle-orm';
 import { parseTransaction } from './parser.js';
 import { calculateWorkTime } from '@finanz/db/soka';
 
@@ -20,6 +22,14 @@ interface WorkTimeSession {
   site?: string;
 }
 
+interface FuelSession {
+  vehicleId?: number;
+  date?: string;
+  odometerKm?: number;
+  quantity?: number;
+  pricePerUnitCents?: number;
+}
+
 interface SessionData {
   step?: string;
   snapshotPeriod?: string;
@@ -28,6 +38,7 @@ interface SessionData {
   currentAccountIndex?: number;
   lastTransactionId?: number;
   workTime?: WorkTimeSession;
+  fuel?: FuelSession;
 }
 
 type BotContext = Context & SessionFlavor<SessionData>;
@@ -189,6 +200,32 @@ export async function handleText(ctx: BotContext) {
 
   if (ctx.session.step === 'worktime_notes') {
     await handleWorkTimeNotes(ctx, text);
+    return;
+  }
+
+  // Fuel dialog steps
+  if (ctx.session.step === 'fuel_date') {
+    await handleFuelDate(ctx, text);
+    return;
+  }
+
+  if (ctx.session.step === 'fuel_odometer') {
+    await handleFuelOdometer(ctx, text);
+    return;
+  }
+
+  if (ctx.session.step === 'fuel_quantity') {
+    await handleFuelQuantity(ctx, text);
+    return;
+  }
+
+  if (ctx.session.step === 'fuel_price') {
+    await handleFuelPrice(ctx, text);
+    return;
+  }
+
+  if (ctx.session.step === 'fuel_notes') {
+    await handleFuelNotes(ctx, text);
     return;
   }
 
@@ -618,6 +655,217 @@ export async function handleUndo(ctx: BotContext) {
   }
 
   await ctx.reply('✓ Letzte Transaktion gelöscht.');
+}
+
+// =====================================================
+// TANKEN
+// =====================================================
+
+export async function handleTanken(ctx: BotContext) {
+  const allVehicles = await db.query.vehicles.findMany({
+    orderBy: [asc(vehicles.sortOrder)],
+  });
+
+  if (allVehicles.length === 0) {
+    await ctx.reply('❌ Keine Fahrzeuge vorhanden. Lege zuerst Fahrzeuge in der Web-App an.');
+    return;
+  }
+
+  ctx.session.step = 'fuel_vehicle';
+  ctx.session.fuel = {};
+
+  await ctx.reply('⛽ Tankvorgang erfassen\n\nWähle das Fahrzeug:', {
+    reply_markup: {
+      inline_keyboard: allVehicles.map((v) => [
+        {
+          text: `${v.type === 'electric' ? '⚡' : '🚗'} ${v.name}`,
+          callback_data: `fuel_vehicle:${v.id}`,
+        },
+      ]),
+    },
+  });
+}
+
+export async function handleFuelCallback(ctx: BotContext) {
+  const data = ctx.callbackQuery?.data;
+  if (!data) return;
+
+  if (data.startsWith('fuel_vehicle:')) {
+    await ctx.answerCallbackQuery();
+    const vehicleId = parseInt(data.split(':')[1]);
+    const vehicle = await db.query.vehicles.findFirst({
+      where: eq(vehicles.id, vehicleId),
+    });
+
+    if (!vehicle) {
+      await ctx.reply('❌ Fahrzeug nicht gefunden.');
+      ctx.session = {};
+      return;
+    }
+
+    ctx.session.fuel = { ...ctx.session.fuel, vehicleId };
+    ctx.session.step = 'fuel_date';
+
+    const today = new Date().toISOString().split('T')[0];
+    await ctx.editMessageText(
+      `✓ Fahrzeug: ${vehicle.name}\n\n📅 Datum? (Vorschlag: ${today}, sende anderes Datum als YYYY-MM-DD oder ".")`
+    );
+    return;
+  }
+}
+
+async function handleFuelDate(ctx: BotContext, text: string) {
+  const today = new Date().toISOString().split('T')[0];
+  const date = text === '.' ? today : text;
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    await ctx.reply('❌ Ungültiges Datum. Bitte im Format YYYY-MM-DD eingeben, z.B. 2026-08-23');
+    return;
+  }
+
+  ctx.session.fuel = { ...ctx.session.fuel, date };
+  ctx.session.step = 'fuel_odometer';
+
+  const vehicleId = ctx.session.fuel?.vehicleId;
+  const lastEntry = vehicleId
+    ? await db.query.fuelEntries.findFirst({
+        where: eq(fuelEntries.vehicleId, vehicleId),
+        orderBy: [desc(fuelEntries.odometerKm)],
+      })
+    : null;
+
+  let msg = `✓ Datum: ${date}\n\n🛣 Kilometerstand?`;
+  if (lastEntry) {
+    msg += ` (Letzter: ${lastEntry.odometerKm} km)`;
+  }
+  await ctx.reply(msg);
+}
+
+async function handleFuelOdometer(ctx: BotContext, text: string) {
+  const km = parseInt(text.replace(/\D/g, ''));
+  if (isNaN(km) || km < 0) {
+    await ctx.reply('❌ Bitte einen gültigen Kilometerstand eingeben, z.B. 123456');
+    return;
+  }
+
+  ctx.session.fuel = { ...ctx.session.fuel, odometerKm: km };
+  ctx.session.step = 'fuel_quantity';
+
+  const vehicleId = ctx.session.fuel?.vehicleId;
+  const vehicle = vehicleId
+    ? await db.query.vehicles.findFirst({ where: eq(vehicles.id, vehicleId) })
+    : null;
+  const unit = vehicle?.type === 'electric' ? 'kWh' : 'Liter';
+
+  await ctx.reply(`✓ Kilometerstand: ${km} km\n\n⛽ Menge in ${unit}?`);
+}
+
+async function handleFuelQuantity(ctx: BotContext, text: string) {
+  const quantity = parseGermanDecimal(text);
+  if (quantity === null || quantity <= 0) {
+    await ctx.reply('❌ Bitte eine gültige Menge eingeben, z.B. 42,5');
+    return;
+  }
+
+  ctx.session.fuel = { ...ctx.session.fuel, quantity };
+  ctx.session.step = 'fuel_price';
+
+  const vehicleId = ctx.session.fuel?.vehicleId;
+  const vehicle = vehicleId
+    ? await db.query.vehicles.findFirst({ where: eq(vehicles.id, vehicleId) })
+    : null;
+  const unit = vehicle?.type === 'electric' ? 'kWh' : 'Liter';
+
+  await ctx.reply(`✓ Menge: ${quantity.toFixed(2)} ${unit}\n\n💶 Preis pro ${unit}? (z.B. 2,999)`);
+}
+
+async function handleFuelPrice(ctx: BotContext, text: string) {
+  const priceCents = parseCurrencyFuel(text);
+  if (priceCents === null || priceCents < 0) {
+    await ctx.reply('❌ Bitte einen gültigen Preis eingeben, z.B. 2,999');
+    return;
+  }
+
+  ctx.session.fuel = { ...ctx.session.fuel, pricePerUnitCents: priceCents };
+  ctx.session.step = 'fuel_notes';
+
+  await ctx.reply(`✓ Preis: ${(priceCents / 100).toFixed(3)} €\n\n📝 Notiz? (oder "-")`);
+}
+
+async function handleFuelNotes(ctx: BotContext, text: string) {
+  const fuel = ctx.session.fuel;
+  if (!fuel?.vehicleId || !fuel.date || fuel.odometerKm == null || fuel.quantity == null || fuel.pricePerUnitCents == null) {
+    await ctx.reply('❌ Eingabe unvollständig. Starte mit /tanken neu.');
+    ctx.session = {};
+    return;
+  }
+
+  const notes = text === '-' ? null : text;
+  const totalCents = Math.round(fuel.quantity * fuel.pricePerUnitCents);
+
+  const [created] = await db
+    .insert(fuelEntries)
+    .values({
+      vehicleId: fuel.vehicleId,
+      date: new Date(fuel.date),
+      odometerKm: fuel.odometerKm,
+      quantity: fuel.quantity,
+      pricePerUnitCents: fuel.pricePerUnitCents,
+      totalCents,
+      notes,
+    })
+    .returning();
+
+  ctx.session = {};
+
+  const vehicle = await db.query.vehicles.findFirst({
+    where: eq(vehicles.id, created.vehicleId),
+  });
+
+  const unit = vehicle?.type === 'electric' ? 'kWh' : 'Liter';
+
+  await ctx.reply(
+    '━━━━━━━━━━━━━━━━━━━━\n' +
+      `✅ Tankvorgang gespeichert\n\n` +
+      `🚗 ${vehicle?.name || 'Fahrzeug'}\n` +
+      `📅 ${new Date(created.date).toLocaleDateString('de-DE')}\n` +
+      `🛣 ${created.odometerKm} km\n` +
+      `⛽ ${created.quantity.toFixed(2)} ${unit}\n` +
+      `💶 ${(created.pricePerUnitCents / 100).toFixed(3)} €/${unit}\n` +
+      `💰 ${formatCurrency(created.totalCents)}\n` +
+      (created.notes ? `📝 ${created.notes}\n` : '') +
+      '━━━━━━━━━━━━━━━━━━━━'
+  );
+}
+
+function parseGermanDecimal(value: string): number | null {
+  let cleaned = value.trim().replace(/\s/g, '');
+  if (!cleaned) return null;
+
+  if (cleaned.includes(',') && cleaned.includes('.')) {
+    cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+  } else if (cleaned.includes(',')) {
+    cleaned = cleaned.replace(',', '.');
+  }
+
+  const num = parseFloat(cleaned);
+  if (isNaN(num)) return null;
+  return num;
+}
+
+function parseCurrencyFuel(value: string): number | null {
+  let cleaned = value.trim().toLowerCase().replace(/\s/g, '').replace('€', '');
+  if (!cleaned) return null;
+
+  if (cleaned.includes(',') && cleaned.includes('.')) {
+    cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+  } else if (cleaned.includes(',')) {
+    cleaned = cleaned.replace(',', '.');
+  }
+
+  const num = parseFloat(cleaned);
+  if (isNaN(num) || num < 0) return null;
+  return Math.round(num * 100);
 }
 
 // Helpers
