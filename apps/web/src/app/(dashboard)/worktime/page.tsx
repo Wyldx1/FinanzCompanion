@@ -8,6 +8,7 @@ import { formatMinutes } from '@/lib/utils';
 import Link from 'next/link';
 import { WorkTimeList } from '@/components/work-time-list';
 import { WorkTimeStats } from '@/components/work-time-stats';
+import { WorkTimeReports } from '@/components/work-time-reports';
 
 function getWeekRange(date: Date): { start: Date; end: Date } {
   const start = new Date(date);
@@ -159,6 +160,9 @@ export default async function WorkTimePage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Reports */}
+      <WorkTimeReports entries={entries} />
 
       {/* Entries List */}
       <Card className="glass overflow-hidden">

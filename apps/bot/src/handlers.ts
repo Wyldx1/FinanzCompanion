@@ -39,11 +39,13 @@ interface WeightSession {
 interface TransactionSession {
   amountCents?: number;
   accountId?: number;
+  date?: string;
 }
 
 interface IncomeSession {
   amountCents?: number;
   type?: string;
+  date?: string;
 }
 
 interface SessionData {
@@ -197,6 +199,11 @@ export async function handleText(ctx: BotContext) {
   }
 
   // Work time dialog steps
+  if (ctx.session.step === 'worktime_date_input') {
+    await handleWorkTimeDateInput(ctx, text);
+    return;
+  }
+
   if (ctx.session.step === 'worktime_start') {
     await handleWorkTimeStart(ctx, text);
     return;
@@ -223,8 +230,8 @@ export async function handleText(ctx: BotContext) {
   }
 
   // Fuel dialog steps
-  if (ctx.session.step === 'fuel_date') {
-    await handleFuelDate(ctx, text);
+  if (ctx.session.step === 'fuel_date_input') {
+    await handleFuelDateInput(ctx, text);
     return;
   }
 
@@ -249,6 +256,11 @@ export async function handleText(ctx: BotContext) {
   }
 
   // Weight dialog steps
+  if (ctx.session.step === 'weight_date_input') {
+    await handleWeightDateInput(ctx, text);
+    return;
+  }
+
   if (ctx.session.step === 'weight_value') {
     await handleWeightValue(ctx, text);
     return;
@@ -265,6 +277,11 @@ export async function handleText(ctx: BotContext) {
     return;
   }
 
+  if (ctx.session.step === 'tx_date_input') {
+    await handleTxDateInput(ctx, text);
+    return;
+  }
+
   if (ctx.session.step === 'tx_description') {
     await handleTxDescription(ctx, text);
     return;
@@ -273,6 +290,11 @@ export async function handleText(ctx: BotContext) {
   // Income dialog steps
   if (ctx.session.step === 'income_amount') {
     await handleIncomeAmount(ctx, text);
+    return;
+  }
+
+  if (ctx.session.step === 'income_date_input') {
+    await handleIncomeDateInput(ctx, text);
     return;
   }
 
@@ -572,12 +594,22 @@ export async function handleMonth(ctx: BotContext) {
 
 export async function handleBericht(ctx: BotContext) {
   const today = new Date().toISOString().split('T')[0];
-  ctx.session.step = 'worktime_start';
-  ctx.session.workTime = { date: today };
+  ctx.session.step = 'worktime_date_choice';
+  ctx.session.workTime = {};
 
   await ctx.reply(
     '🦺 Baustellenbericht\n\n' +
-      `Startzeit? (Vorschlag 07:30, sende nur eine andere Uhrzeit, z.B. 08:00)`
+      '📅 Datum?',
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: `📅 Heute (${today})`, callback_data: 'date_choice:today:worktime' },
+            { text: '📆 Anderes Datum', callback_data: 'date_choice:custom:worktime' },
+          ],
+        ],
+      },
+    }
   );
 }
 
@@ -757,12 +789,124 @@ export async function handleCallback(ctx: BotContext) {
     }
 
     ctx.session.fuel = { ...ctx.session.fuel, vehicleId };
-    ctx.session.step = 'fuel_date';
+    ctx.session.step = 'fuel_date_choice';
 
     const today = new Date().toISOString().split('T')[0];
     await ctx.editMessageText(
-      `✓ Fahrzeug: ${vehicle.name}\n\n📅 Datum? (Vorschlag: ${today}, sende anderes Datum als YYYY-MM-DD oder ".")`
+      `✓ Fahrzeug: ${vehicle.name}\n\n📅 Datum?`,
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              { text: `📅 Heute (${today})`, callback_data: 'date_choice:today:fuel' },
+              { text: '📆 Anderes Datum', callback_data: 'date_choice:custom:fuel' },
+            ],
+          ],
+        },
+      }
     );
+    return;
+  }
+
+  // Date choice callbacks
+  if (data.startsWith('date_choice:')) {
+    await ctx.answerCallbackQuery();
+    const [, choice, prefix] = data.split(':');
+    const today = new Date().toISOString().split('T')[0];
+
+    if (prefix === 'fuel') {
+      if (choice === 'today') {
+        ctx.session.fuel = { ...ctx.session.fuel, date: today };
+        ctx.session.step = 'fuel_odometer';
+        const vehicleId = ctx.session.fuel?.vehicleId;
+        const lastEntry = vehicleId
+          ? await db.query.fuelEntries.findFirst({
+              where: eq(fuelEntries.vehicleId, vehicleId),
+              orderBy: [desc(fuelEntries.odometerKm)],
+            })
+          : null;
+        let msg = `✓ Datum: ${today}\n\n🛣 Kilometerstand?`;
+        if (lastEntry) msg += ` (Letzter: ${lastEntry.odometerKm} km)`;
+        await ctx.editMessageText(msg);
+      } else {
+        ctx.session.step = 'fuel_date_input';
+        await ctx.editMessageText('📆 Datum eingeben (YYYY-MM-DD):');
+      }
+      return;
+    }
+
+    if (prefix === 'weight') {
+      if (choice === 'today') {
+        ctx.session.weight = { ...ctx.session.weight, date: today };
+        ctx.session.step = 'weight_value';
+        await ctx.editMessageText(`✓ Datum: ${today}\n\n⚖️ Gewicht in kg?`);
+      } else {
+        ctx.session.step = 'weight_date_input';
+        await ctx.editMessageText('📆 Datum eingeben (YYYY-MM-DD):');
+      }
+      return;
+    }
+
+    if (prefix === 'worktime') {
+      if (choice === 'today') {
+        ctx.session.workTime = { ...ctx.session.workTime, date: today };
+        ctx.session.step = 'worktime_start';
+        await ctx.editMessageText(
+          `✓ Datum: ${today}\n\n🦺 Baustellenbericht\n\nStartzeit? (Vorschlag 07:30, sende nur eine andere Uhrzeit, z.B. 08:00)`
+        );
+      } else {
+        ctx.session.step = 'worktime_date_input';
+        await ctx.editMessageText('📆 Datum eingeben (YYYY-MM-DD):');
+      }
+      return;
+    }
+
+    if (prefix === 'tx') {
+      if (choice === 'today') {
+        ctx.session.tx = { ...ctx.session.tx, date: today };
+        ctx.session.step = 'tx_account';
+        const buttons = await buildTxAccountButtons();
+        if (buttons.length === 0) {
+          await ctx.editMessageText('❌ Kein passendes Konto gefunden. Lege zuerst ein Bargeld- oder Girokonto an.');
+          ctx.session = {};
+          return;
+        }
+        await ctx.editMessageText(
+          `✓ Datum: ${today}\n\nZahlungsart?`,
+          { reply_markup: { inline_keyboard: [buttons] } }
+        );
+      } else {
+        ctx.session.step = 'tx_date_input';
+        await ctx.editMessageText('📆 Datum eingeben (YYYY-MM-DD):');
+      }
+      return;
+    }
+
+    if (prefix === 'income') {
+      if (choice === 'today') {
+        ctx.session.income = { ...ctx.session.income, date: today };
+        ctx.session.step = 'income_type';
+        const types = [
+          { label: '💼 Gehalt', value: 'Gehalt' },
+          { label: '👶 Kindergeld', value: 'Kindergeld' },
+          { label: '⏰ Überstunden', value: 'Überstunden' },
+          { label: '📦 Sonstiges', value: 'Sonstiges' },
+        ];
+        await ctx.editMessageText(
+          `✓ Datum: ${today}\n\nTyp?`,
+          {
+            reply_markup: {
+              inline_keyboard: [types.map((t) => ({ text: t.label, callback_data: `income_type:${t.value}` }))],
+            },
+          }
+        );
+      } else {
+        ctx.session.step = 'income_date_input';
+        await ctx.editMessageText('📆 Datum eingeben (YYYY-MM-DD):');
+      }
+      return;
+    }
+
     return;
   }
 
@@ -804,7 +948,7 @@ export async function handleCallback(ctx: BotContext) {
   }
 }
 
-async function handleFuelDate(ctx: BotContext, text: string) {
+async function handleFuelDateInput(ctx: BotContext, text: string) {
   const today = new Date().toISOString().split('T')[0];
   const date = text === '.' ? today : text;
 
@@ -829,6 +973,63 @@ async function handleFuelDate(ctx: BotContext, text: string) {
     msg += ` (Letzter: ${lastEntry.odometerKm} km)`;
   }
   await ctx.reply(msg);
+}
+
+async function handleWeightDateInput(ctx: BotContext, text: string) {
+  const today = new Date().toISOString().split('T')[0];
+  const date = text === '.' ? today : text;
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    await ctx.reply('❌ Ungültiges Datum. Bitte im Format YYYY-MM-DD eingeben, z.B. 2026-08-23');
+    return;
+  }
+
+  ctx.session.weight = { ...ctx.session.weight, date };
+  ctx.session.step = 'weight_value';
+
+  await ctx.reply(`✓ Datum: ${date}\n\n⚖️ Gewicht in kg?`);
+}
+
+async function handleWorkTimeDateInput(ctx: BotContext, text: string) {
+  const today = new Date().toISOString().split('T')[0];
+  const date = text === '.' ? today : text;
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    await ctx.reply('❌ Ungültiges Datum. Bitte im Format YYYY-MM-DD eingeben, z.B. 2026-08-23');
+    return;
+  }
+
+  ctx.session.workTime = { ...ctx.session.workTime, date };
+  ctx.session.step = 'worktime_start';
+
+  await ctx.reply(
+    `✓ Datum: ${date}\n\n🦺 Baustellenbericht\n\nStartzeit? (Vorschlag 07:30, sende nur eine andere Uhrzeit, z.B. 08:00)`
+  );
+}
+
+async function handleTxDateInput(ctx: BotContext, text: string) {
+  const today = new Date().toISOString().split('T')[0];
+  const date = text === '.' ? today : text;
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    await ctx.reply('❌ Ungültiges Datum. Bitte im Format YYYY-MM-DD eingeben, z.B. 2026-08-23');
+    return;
+  }
+
+  ctx.session.tx = { ...ctx.session.tx, date };
+  ctx.session.step = 'tx_account';
+
+  const buttons = await buildTxAccountButtons();
+  if (buttons.length === 0) {
+    await ctx.reply('❌ Kein passendes Konto gefunden. Lege zuerst ein Bargeld- oder Girokonto an.');
+    ctx.session = {};
+    return;
+  }
+
+  await ctx.reply(
+    `✓ Datum: ${date}\n\nZahlungsart?`,
+    { reply_markup: { inline_keyboard: [buttons] } }
+  );
 }
 
 async function handleFuelOdometer(ctx: BotContext, text: string) {
@@ -934,12 +1135,22 @@ async function handleFuelNotes(ctx: BotContext, text: string) {
 
 export async function handleGewicht(ctx: BotContext) {
   const today = new Date().toISOString().split('T')[0];
-  ctx.session.step = 'weight_value';
-  ctx.session.weight = { date: today };
+  ctx.session.step = 'weight_date_choice';
+  ctx.session.weight = {};
 
   await ctx.reply(
     '⚖️ Gewicht eintragen\n\n' +
-      `Aktuelles Gewicht in kg? (z.B. 82,5)`
+      '📅 Datum?',
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: `📅 Heute (${today})`, callback_data: 'date_choice:today:weight' },
+            { text: '📆 Anderes Datum', callback_data: 'date_choice:custom:weight' },
+          ],
+        ],
+      },
+    }
   );
 }
 
@@ -1001,16 +1212,7 @@ export async function handleTransaktion(ctx: BotContext) {
   );
 }
 
-async function handleTxAmount(ctx: BotContext, text: string) {
-  const amountCents = parseCurrencyFuel(text);
-  if (amountCents === null || amountCents <= 0) {
-    await ctx.reply('❌ Bitte einen gültigen Betrag eingeben, z.B. 14,80');
-    return;
-  }
-
-  ctx.session.tx = { ...ctx.session.tx, amountCents };
-  ctx.session.step = 'tx_account';
-
+async function buildTxAccountButtons(): Promise<{ text: string; callback_data: string }[]> {
   const cashAccount = await db.query.accounts.findFirst({
     where: and(eq(accounts.kind, 'cash'), isNull(accounts.archivedAt)),
   });
@@ -1026,17 +1228,30 @@ async function handleTxAmount(ctx: BotContext, text: string) {
     buttons.push({ text: `💳 Karte (${cardAccount.name})`, callback_data: `tx_account:${cardAccount.id}` });
   }
 
-  if (buttons.length === 0) {
-    await ctx.reply('❌ Kein passendes Konto gefunden. Lege zuerst ein Bargeld- oder Girokonto an.');
-    ctx.session = {};
+  return buttons;
+}
+
+async function handleTxAmount(ctx: BotContext, text: string) {
+  const amountCents = parseCurrencyFuel(text);
+  if (amountCents === null || amountCents <= 0) {
+    await ctx.reply('❌ Bitte einen gültigen Betrag eingeben, z.B. 14,80');
     return;
   }
 
+  ctx.session.tx = { ...ctx.session.tx, amountCents };
+  ctx.session.step = 'tx_date_choice';
+
+  const today = new Date().toISOString().split('T')[0];
   await ctx.reply(
-    `✓ Betrag: ${formatCurrency(amountCents)}\n\nZahlungsart?`,
+    `✓ Betrag: ${formatCurrency(amountCents)}\n\n📅 Datum?`,
     {
       reply_markup: {
-        inline_keyboard: [buttons],
+        inline_keyboard: [
+          [
+            { text: `📅 Heute (${today})`, callback_data: 'date_choice:today:tx' },
+            { text: '📆 Anderes Datum', callback_data: 'date_choice:custom:tx' },
+          ],
+        ],
       },
     }
   );
@@ -1064,7 +1279,7 @@ async function handleTxDescription(ctx: BotContext, text: string) {
   const [created] = await db
     .insert(transactions)
     .values({
-      occurredOn: parsed?.date || new Date(),
+      occurredOn: tx.date ? new Date(tx.date) : (parsed?.date || new Date()),
       amountCents: tx.amountCents,
       direction: 'expense',
       categoryId,
@@ -1106,14 +1321,16 @@ export async function handleEinkommen(ctx: BotContext) {
   );
 }
 
-async function handleIncomeAmount(ctx: BotContext, text: string) {
-  const amountCents = parseCurrencyFuel(text);
-  if (amountCents === null || amountCents <= 0) {
-    await ctx.reply('❌ Bitte einen gültigen Betrag eingeben, z.B. 2500');
+async function handleIncomeDateInput(ctx: BotContext, text: string) {
+  const today = new Date().toISOString().split('T')[0];
+  const date = text === '.' ? today : text;
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    await ctx.reply('❌ Ungültiges Datum. Bitte im Format YYYY-MM-DD eingeben, z.B. 2026-08-23');
     return;
   }
 
-  ctx.session.income = { ...ctx.session.income, amountCents };
+  ctx.session.income = { ...ctx.session.income, date };
   ctx.session.step = 'income_type';
 
   const types = [
@@ -1124,10 +1341,36 @@ async function handleIncomeAmount(ctx: BotContext, text: string) {
   ];
 
   await ctx.reply(
-    `✓ Betrag: ${formatCurrency(amountCents)}\n\nTyp?`,
+    `✓ Datum: ${date}\n\nTyp?`,
     {
       reply_markup: {
         inline_keyboard: [types.map((t) => ({ text: t.label, callback_data: `income_type:${t.value}` }))],
+      },
+    }
+  );
+}
+
+async function handleIncomeAmount(ctx: BotContext, text: string) {
+  const amountCents = parseCurrencyFuel(text);
+  if (amountCents === null || amountCents <= 0) {
+    await ctx.reply('❌ Bitte einen gültigen Betrag eingeben, z.B. 2500');
+    return;
+  }
+
+  ctx.session.income = { ...ctx.session.income, amountCents };
+  ctx.session.step = 'income_date_choice';
+
+  const today = new Date().toISOString().split('T')[0];
+  await ctx.reply(
+    `✓ Betrag: ${formatCurrency(amountCents)}\n\n📅 Datum?`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: `📅 Heute (${today})`, callback_data: 'date_choice:today:income' },
+            { text: '📆 Anderes Datum', callback_data: 'date_choice:custom:income' },
+          ],
+        ],
       },
     }
   );
@@ -1150,7 +1393,7 @@ async function handleIncomeNote(ctx: BotContext, text: string) {
   const [created] = await db
     .insert(transactions)
     .values({
-      occurredOn: new Date(),
+      occurredOn: income.date ? new Date(income.date) : new Date(),
       amountCents: income.amountCents,
       direction: 'income',
       categoryId: null,

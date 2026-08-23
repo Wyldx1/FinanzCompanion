@@ -64,6 +64,13 @@
       "when": 1787490222149,
       "tag": "0008_giant_the_santerians",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1787500539628,
+      "tag": "0009_careful_vision",
+      "breakpoints": true
     }
   ]
 }

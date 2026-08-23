@@ -6,18 +6,36 @@ import { NetworthChart } from '@/components/networth-chart';
 import { CategoryChart } from '@/components/category-chart';
 import { SpendingTrendChart } from '@/components/spending-trend-chart';
 import { MetricCard } from '@/components/metric-card';
+import { DashboardToolsOverview } from '@/components/dashboard-tools-overview';
 import { TrendingUp, Plus, Sparkles, PieChart as PieChartIcon, BarChart3 } from 'lucide-react';
 import Link from 'next/link';
+import { db } from '@/lib/db';
+import { fuelEntries, repairs, workTimeEntries, weightEntries } from '@finanz/db/schema';
+import { desc } from 'drizzle-orm';
 
 export default async function DashboardPage() {
   const currentPeriod = getCurrentPeriod();
-  const [metrics, history, categoryExpenses, spendingTrend, projectedSummary, monthlyTxSummary] = await Promise.all([
+  const [metrics, history, categoryExpenses, spendingTrend, projectedSummary, monthlyTxSummary, allFuelEntries, allRepairs, allWorkTimeEntries, allWeightEntries] = await Promise.all([
     calculateMetrics(currentPeriod),
     getNetworthHistory(24),
     getCategoryExpenses(currentPeriod),
     getSpendingTrend(6),
     getProjectedSummary(),
     getMonthlyTransactionSummary(currentPeriod),
+    db.query.fuelEntries.findMany({
+      with: { vehicle: true },
+      orderBy: [desc(fuelEntries.date)],
+    }),
+    db.query.repairs.findMany({
+      with: { vehicle: true },
+      orderBy: [desc(repairs.date)],
+    }),
+    db.query.workTimeEntries.findMany({
+      orderBy: [desc(workTimeEntries.date)],
+    }),
+    db.query.weightEntries.findMany({
+      orderBy: [desc(weightEntries.date)],
+    }),
   ]);
 
   const hasData = metrics !== null;
@@ -96,6 +114,14 @@ export default async function DashboardPage() {
               subtitle="Liquide / Median-Ausgaben"
             />
           </div>
+
+          {/* Tools Overview */}
+          <DashboardToolsOverview
+            fuelEntries={allFuelEntries}
+            repairs={allRepairs}
+            workTimeEntries={allWorkTimeEntries}
+            weightEntries={allWeightEntries}
+          />
 
           {/* Projected Current State */}
           <div className="grid gap-4 lg:grid-cols-2">

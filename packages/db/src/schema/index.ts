@@ -315,6 +315,7 @@ export const vehicles = pgTable(
 
 export const vehiclesRelations = relations(vehicles, ({ many }) => ({
   fuelEntries: many(fuelEntries),
+  repairs: many(repairs),
 }));
 
 export const fuelEntries = pgTable(
@@ -341,6 +342,33 @@ export const fuelEntries = pgTable(
 export const fuelEntriesRelations = relations(fuelEntries, ({ one }) => ({
   vehicle: one(vehicles, {
     fields: [fuelEntries.vehicleId],
+    references: [vehicles.id],
+  }),
+}));
+
+export const repairs = pgTable(
+  'repairs',
+  {
+    id: serial('id').primaryKey(),
+    vehicleId: integer('vehicle_id')
+      .notNull()
+      .references(() => vehicles.id),
+    date: date('date', { mode: 'date' }).notNull(),
+    odometerKm: integer('odometer_km'),
+    description: text('description').notNull(),
+    costCents: integer('cost_cents').notNull().default(0),
+    notes: text('notes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    idxRepairsVehicleDate: index('idx_repairs_vehicle_date').on(table.vehicleId, table.date),
+  })
+);
+
+export const repairsRelations = relations(repairs, ({ one }) => ({
+  vehicle: one(vehicles, {
+    fields: [repairs.vehicleId],
     references: [vehicles.id],
   }),
 }));

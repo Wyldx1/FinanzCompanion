@@ -65,7 +65,7 @@ async function seed() {
   } else {
     const vehicleData = [
       { name: 'Volvo', type: 'fuel' as const, sortOrder: 1 },
-      { name: 'E-Auto', type: 'electric' as const, sortOrder: 2 },
+      { name: 'BYD', type: 'electric' as const, sortOrder: 2 },
     ];
 
     const insertedVehicles = await db.insert(vehicles).values(vehicleData).returning();
