@@ -470,6 +470,25 @@ export const workTimeEntries = pgTable(
 );
 
 // =====================================================
+// GEWICHT
+// =====================================================
+
+export const weightEntries = pgTable(
+  'weight_entries',
+  {
+    id: serial('id').primaryKey(),
+    date: date('date', { mode: 'date' }).notNull(),
+    weightKg: real('weight_kg').notNull(),
+    notes: text('notes'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    idxWeightDate: index('idx_weight_date').on(table.date),
+  })
+);
+
+// =====================================================
 // INFRASTRUKTUR
 // =====================================================
 

@@ -14,6 +14,7 @@ import {
   handleBericht,
   handleTanken,
   handleFuelCallback,
+  handleGewicht,
 } from './handlers.js';
 import { createServer } from 'http';
 
@@ -33,6 +34,11 @@ interface FuelSession {
   pricePerUnitCents?: number;
 }
 
+interface WeightSession {
+  date?: string;
+  weightKg?: number;
+}
+
 // Session data interface
 interface SessionData {
   step?: string;
@@ -43,6 +49,7 @@ interface SessionData {
   lastTransactionId?: number;
   workTime?: WorkTimeSession;
   fuel?: FuelSession;
+  weight?: WeightSession;
 }
 
 type BotContext = Context & SessionFlavor<SessionData>;
@@ -180,6 +187,7 @@ bot.command('start', async (ctx) => {
       'Verfügbare Befehle:\n' +
       '/stand - Monatsabschluss erfassen\n' +
       '/tanken - Tank- oder Ladevorgang erfassen\n' +
+      '/gewicht - Gewicht eintragen\n' +
       '/bericht - Arbeitszeit / Baustellenbericht\n' +
       '/heute - Ausgaben von heute\n' +
       '/monat - Monatszwischenstand\n' +
@@ -196,6 +204,7 @@ bot.command('hilfe', async (ctx) => {
     '📊 Finanz-Companion Befehle:\n\n' +
       '/stand - Monatsabschluss erfassen\n' +
       '/tanken - Tank- oder Ladevorgang erfassen\n' +
+      '/gewicht - Gewicht eintragen\n' +
       '/bericht - Arbeitszeit / Baustellenbericht\n' +
       '/heute - Ausgaben von heute\n' +
       '/monat - Monatszwischenstand\n' +
@@ -212,6 +221,7 @@ bot.command('hilfe', async (ctx) => {
 
 bot.command('stand', handleStand);
 bot.command('tanken', handleTanken);
+bot.command('gewicht', handleGewicht);
 bot.command('heute', handleToday);
 bot.command('monat', handleMonth);
 bot.command('undo', handleUndo);
@@ -242,6 +252,7 @@ function registerCommands(): void {
     .setMyCommands([
       { command: 'stand', description: 'Monatsabschluss erfassen' },
       { command: 'tanken', description: 'Tank- oder Ladevorgang erfassen' },
+      { command: 'gewicht', description: 'Gewicht eintragen' },
       { command: 'bericht', description: 'Arbeitszeit / Baustellenbericht' },
       { command: 'heute', description: 'Ausgaben von heute' },
       { command: 'monat', description: 'Monatszwischenstand' },

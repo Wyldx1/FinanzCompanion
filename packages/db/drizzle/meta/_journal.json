@@ -57,6 +57,13 @@
       "when": 1787487579660,
       "tag": "0007_orange_mattie_franklin",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1787490222149,
+      "tag": "0008_giant_the_santerians",
+      "breakpoints": true
     }
   ]
 }

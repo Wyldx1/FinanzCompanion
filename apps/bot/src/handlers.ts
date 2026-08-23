@@ -9,6 +9,7 @@ import {
   workTimeEntries,
   vehicles,
   fuelEntries,
+  weightEntries,
 } from '@finanz/db/schema';
 import { eq, isNull, and, gte, lte, lt, desc, sql, asc } from 'drizzle-orm';
 import { parseTransaction } from './parser.js';
@@ -30,6 +31,11 @@ interface FuelSession {
   pricePerUnitCents?: number;
 }
 
+interface WeightSession {
+  date?: string;
+  weightKg?: number;
+}
+
 interface SessionData {
   step?: string;
   snapshotPeriod?: string;
@@ -39,6 +45,7 @@ interface SessionData {
   lastTransactionId?: number;
   workTime?: WorkTimeSession;
   fuel?: FuelSession;
+  weight?: WeightSession;
 }
 
 type BotContext = Context & SessionFlavor<SessionData>;
@@ -226,6 +233,17 @@ export async function handleText(ctx: BotContext) {
 
   if (ctx.session.step === 'fuel_notes') {
     await handleFuelNotes(ctx, text);
+    return;
+  }
+
+  // Weight dialog steps
+  if (ctx.session.step === 'weight_value') {
+    await handleWeightValue(ctx, text);
+    return;
+  }
+
+  if (ctx.session.step === 'weight_notes') {
+    await handleWeightNotes(ctx, text);
     return;
   }
 
@@ -833,6 +851,65 @@ async function handleFuelNotes(ctx: BotContext, text: string) {
       `⛽ ${created.quantity.toFixed(2)} ${unit}\n` +
       `💶 ${(created.pricePerUnitCents / 100).toFixed(3)} €/${unit}\n` +
       `💰 ${formatCurrency(created.totalCents)}\n` +
+      (created.notes ? `📝 ${created.notes}\n` : '') +
+      '━━━━━━━━━━━━━━━━━━━━'
+  );
+}
+
+// =====================================================
+// GEWICHT
+// =====================================================
+
+export async function handleGewicht(ctx: BotContext) {
+  const today = new Date().toISOString().split('T')[0];
+  ctx.session.step = 'weight_value';
+  ctx.session.weight = { date: today };
+
+  await ctx.reply(
+    '⚖️ Gewicht eintragen\n\n' +
+      `Aktuelles Gewicht in kg? (z.B. 82,5)`
+  );
+}
+
+async function handleWeightValue(ctx: BotContext, text: string) {
+  const weightKg = parseGermanDecimal(text.replace(/kg/i, '').trim());
+  if (weightKg === null || weightKg <= 0) {
+    await ctx.reply('❌ Bitte ein gültiges Gewicht eingeben, z.B. 82,5');
+    return;
+  }
+
+  ctx.session.weight = { ...ctx.session.weight, weightKg };
+  ctx.session.step = 'weight_notes';
+
+  await ctx.reply(`✓ Gewicht: ${weightKg.toFixed(1)} kg\n\n📝 Notiz? (oder "-")`);
+}
+
+async function handleWeightNotes(ctx: BotContext, text: string) {
+  const weight = ctx.session.weight;
+  if (!weight?.date || weight.weightKg == null) {
+    await ctx.reply('❌ Eingabe unvollständig. Starte mit /gewicht neu.');
+    ctx.session = {};
+    return;
+  }
+
+  const notes = text === '-' ? null : text;
+
+  const [created] = await db
+    .insert(weightEntries)
+    .values({
+      date: new Date(weight.date),
+      weightKg: weight.weightKg,
+      notes,
+    })
+    .returning();
+
+  ctx.session = {};
+
+  await ctx.reply(
+    '━━━━━━━━━━━━━━━━━━━━\n' +
+      `✅ Gewicht gespeichert\n\n` +
+      `📅 ${new Date(created.date).toLocaleDateString('de-DE')}\n` +
+      `⚖️ ${created.weightKg.toFixed(1)} kg\n` +
       (created.notes ? `📝 ${created.notes}\n` : '') +
       '━━━━━━━━━━━━━━━━━━━━'
   );
