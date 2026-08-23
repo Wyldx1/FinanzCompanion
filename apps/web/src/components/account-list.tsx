@@ -51,6 +51,22 @@ export function AccountList({ accounts, isArchived = false }: AccountListProps) 
     router.refresh();
   }
 
+  async function handleDirectDelete(id: number) {
+    if (!confirm('Konto endgültig löschen? Diese Aktion kann nicht rückgängig gemacht werden.')) return;
+
+    const res = await fetch(`/api/accounts/${id}?hard=true`, {
+      method: 'DELETE',
+    });
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({ error: { message: 'Unbekannter Fehler' } }));
+      alert(data.error?.message || 'Löschen fehlgeschlagen. Das Konto hat möglicherweise noch Daten.');
+      return;
+    }
+
+    router.refresh();
+  }
+
   async function handleRestore(id: number) {
     await fetch(`/api/accounts/${id}`, {
       method: 'PATCH',
@@ -166,6 +182,15 @@ export function AccountList({ accounts, isArchived = false }: AccountListProps) 
                   className="hover:bg-[hsl(45,90%,70%)]/20 hover:text-[hsl(45,90%,70%)]"
                 >
                   <Archive className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => handleDirectDelete(account.id)}
+                  className="hover:bg-destructive/20 hover:text-destructive"
+                  title="Endgültig löschen"
+                >
+                  <Trash2 className="h-4 w-4" />
                 </Button>
               </>
             )}
