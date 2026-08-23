@@ -303,8 +303,59 @@ export async function handleText(ctx: BotContext) {
     return;
   }
 
+  // Otherwise, check if it looks like a fuel entry
+  if (looksLikeFuelEntry(text)) {
+    await handleFuelShortcut(ctx, text);
+    return;
+  }
+
   // Otherwise, try to parse as transaction
   await handleTransactionInput(ctx, text);
+}
+
+function looksLikeFuelEntry(text: string): boolean {
+  const lower = text.toLowerCase();
+  return /\b(tanken|getankt|diesel|benzin|kraftstoff|strom|laden|aufladen)\b/.test(lower);
+}
+
+function extractFuelQuantity(text: string): number | null {
+  // Try to find the first decimal number in the text, e.g. "60,5 tanken" or "60.5 tanken"
+  const match = text.match(/(\d+(?:[.,]\d+)?)/);
+  if (!match) return null;
+  const normalized = match[1].replace(',', '.');
+  const value = parseFloat(normalized);
+  return isNaN(value) || value <= 0 ? null : value;
+}
+
+async function handleFuelShortcut(ctx: BotContext, text: string) {
+  const quantity = extractFuelQuantity(text);
+
+  const allVehicles = await db.query.vehicles.findMany({
+    orderBy: [asc(vehicles.sortOrder)],
+  });
+
+  if (allVehicles.length === 0) {
+    await ctx.reply('❌ Keine Fahrzeuge vorhanden. Lege zuerst Fahrzeuge in der Web-App an.');
+    return;
+  }
+
+  ctx.session.step = 'fuel_vehicle';
+  ctx.session.fuel = quantity !== null ? { quantity } : {};
+
+  const hint = quantity !== null
+    ? `⛽ ${quantity.toFixed(2)} ${text.toLowerCase().includes('kwh') || text.toLowerCase().includes('strom') ? 'kWh' : 'Liter'} erkannt.\n\n`
+    : '⛽ Tankvorgang erfassen\n\n';
+
+  await ctx.reply(`${hint}Wähle das Fahrzeug:`, {
+    reply_markup: {
+      inline_keyboard: allVehicles.map((v) => [
+        {
+          text: `${v.type === 'electric' ? '⚡' : '🚗'} ${v.name}`,
+          callback_data: `fuel_vehicle:${v.id}`,
+        },
+      ]),
+    },
+  });
 }
 
 async function handleSnapshotInput(ctx: BotContext, text: string) {
@@ -1100,6 +1151,22 @@ async function handleFuelOdometer(ctx: BotContext, text: string) {
 }
 
 async function handleFuelQuantity(ctx: BotContext, text: string) {
+  const existingQuantity = ctx.session.fuel?.quantity;
+
+  if (existingQuantity != null) {
+    // Quantity was already provided via free-text shortcut; skip to price.
+    ctx.session.step = 'fuel_price';
+
+    const vehicleId = ctx.session.fuel?.vehicleId;
+    const vehicle = vehicleId
+      ? await db.query.vehicles.findFirst({ where: eq(vehicles.id, vehicleId) })
+      : null;
+    const unit = vehicle?.type === 'electric' ? 'kWh' : 'Liter';
+
+    await ctx.reply(`✓ Menge: ${existingQuantity.toFixed(2)} ${unit}\n\n💶 Preis pro ${unit}? (z.B. 2,999)`);
+    return;
+  }
+
   const quantity = parseGermanDecimal(text);
   if (quantity === null || quantity <= 0) {
     await ctx.reply('❌ Bitte eine gültige Menge eingeben, z.B. 42,5');
